@@ -3,6 +3,10 @@
 import type { User } from "@supabase/supabase-js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSupabasePublicConfig } from "@/components/SupabaseConfigProvider";
+import {
+  getAuthErrorMessage,
+  mapSupabaseAuthErrorCode,
+} from "@/lib/auth/errors";
 import { createBrowserClientFromConfig } from "@/lib/supabase/client";
 
 export function useAuth() {
@@ -77,7 +81,9 @@ export function useAuth() {
           emailRedirectTo: `${window.location.origin}/auth/callback?next=/`,
         },
       });
-      return { error: error?.message ?? null };
+      if (!error) return { error: null };
+      const code = mapSupabaseAuthErrorCode(error.message);
+      return { error: getAuthErrorMessage(code) };
     },
     [supabase],
   );

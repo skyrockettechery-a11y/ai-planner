@@ -2,13 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useSupabasePublicConfig } from "@/components/SupabaseConfigProvider";
+import { cleanAuthParamsFromUrl } from "@/lib/auth/cleanAuthUrl";
 import { completeAuthFromParsed } from "@/lib/auth/completeAuth";
 import { AUTH_ERROR_PARAM } from "@/lib/auth/errors";
 import {
+  AUTH_DEBUG_HASH_PARAM,
+  AUTH_DEBUG_PATH_PARAM,
+  AUTH_DEBUG_QUERY_PARAM,
   getAuthParamNames,
   hasRecognizedAuthParams,
   parseAuthParamsFromUrl,
-  snapshotAuthUrlDebug,
 } from "@/lib/auth/parseAuthParams";
 import { captureAuthUrlOnLanding } from "@/lib/auth/urlParams";
 import { createBrowserClientFromConfig } from "@/lib/supabase/client";
@@ -50,29 +53,10 @@ export function AuthSessionHandler({
       const url = new URL(window.location.href);
       const parsed = parseAuthParamsFromUrl(url);
       const result = await completeAuthFromParsed(supabase, parsed);
-
       const names = getAuthParamNames(url);
-      snapshotAuthUrlDebug(url.href);
-
-      const cleanUrl = new URL(url.pathname, url.origin);
-      for (const [key, value] of url.searchParams.entries()) {
-        if (
-          key !== AUTH_ERROR_PARAM &&
-          !key.startsWith("auth_debug_") &&
-          key !== "code" &&
-          key !== "token_hash" &&
-          key !== "token" &&
-          key !== "type" &&
-          key !== "error" &&
-          key !== "error_code" &&
-          key !== "error_description"
-        ) {
-          cleanUrl.searchParams.set(key, value);
-        }
-      }
 
       if (result.ok) {
-        window.history.replaceState(null, "", cleanUrl.toString());
+        cleanAuthParamsFromUrl(url.href);
         await supabase.auth.getSession();
         return;
       }
@@ -88,15 +72,16 @@ export function AuthSessionHandler({
         names.hash.join(",") || "(none)",
       );
 
-      cleanUrl.searchParams.set(AUTH_ERROR_PARAM, result.errorCode);
-      cleanUrl.searchParams.set("auth_debug_path", names.path);
+      const failUrl = new URL(url.pathname, url.origin);
+      failUrl.searchParams.set(AUTH_ERROR_PARAM, result.errorCode);
+      failUrl.searchParams.set(AUTH_DEBUG_PATH_PARAM, names.path);
       if (names.query.length > 0) {
-        cleanUrl.searchParams.set("auth_debug_q", names.query.join(","));
+        failUrl.searchParams.set(AUTH_DEBUG_QUERY_PARAM, names.query.join(","));
       }
       if (names.hash.length > 0) {
-        cleanUrl.searchParams.set("auth_debug_h", names.hash.join(","));
+        failUrl.searchParams.set(AUTH_DEBUG_HASH_PARAM, names.hash.join(","));
       }
-      window.history.replaceState(null, "", cleanUrl.toString());
+      window.history.replaceState(null, "", failUrl.toString());
     };
 
     void run().finally(() => {

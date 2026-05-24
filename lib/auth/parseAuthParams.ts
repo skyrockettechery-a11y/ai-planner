@@ -111,8 +111,10 @@ export function readAuthUrlDebugFromSearchParams(
   };
 }
 
+/** Auth params the session handler should try to complete (not error-only URLs). */
 export function hasRecognizedAuthParams(url: URL): boolean {
-  return parseAuthParamsFromUrl(url).kind !== "none";
+  const kind = parseAuthParamsFromUrl(url).kind;
+  return kind === "code" || kind === "otp" || kind === "session";
 }
 
 export function hasAuthRelatedParamNames(snapshot: AuthUrlDebugSnapshot): boolean {

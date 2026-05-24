@@ -3,9 +3,8 @@
 import { useEffect, useState } from "react";
 import { ActiveTasksSection } from "@/components/ActiveTasksSection";
 import { AuthBar } from "@/components/AuthBar";
-import { AuthErrorBanner } from "@/components/AuthErrorBanner";
+import { AuthFeedback } from "@/components/AuthFeedback";
 import { AuthSessionHandler } from "@/components/AuthSessionHandler";
-import { AuthUrlDebugBanner } from "@/components/AuthUrlDebugBanner";
 import { CompletedSection } from "@/components/CompletedSection";
 import { DailyOverview } from "@/components/DailyOverview";
 import { DoingNowSection } from "@/components/DoingNowSection";
@@ -116,8 +115,7 @@ export function PlannerApp({ devSupabaseDiagnostic = null }: PlannerAppProps) {
           </p>
         </div>
         <AuthSessionHandler onCompletingChange={setAuthCompleting} />
-        <AuthErrorBanner />
-        <AuthUrlDebugBanner show={configured && !user} />
+        <AuthFeedback key={authCompleting ? "auth-working" : "auth-settled"} />
         <AuthBar
           configured={configured}
           loading={authLoading}

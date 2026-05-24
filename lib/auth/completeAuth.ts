@@ -1,4 +1,7 @@
-import type { AuthErrorCode } from "@/lib/auth/errors";
+import {
+  mapSupabaseAuthErrorCode,
+  type AuthErrorCode,
+} from "@/lib/auth/errors";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseAuthParamsFromUrl, type ParsedAuthParams } from "@/lib/auth/parseAuthParams";
 
@@ -26,7 +29,7 @@ export async function completeAuthFromParsed(
       const { error } = await supabase.auth.exchangeCodeForSession(params.code);
       if (error) {
         console.error("[auth] exchangeCodeForSession failed:", error.message);
-        return { ok: false, errorCode: "exchange_failed" };
+        return { ok: false, errorCode: mapSupabaseAuthErrorCode(error.message) };
       }
       return { ok: true };
     }
@@ -37,7 +40,7 @@ export async function completeAuthFromParsed(
       });
       if (error) {
         console.error("[auth] verifyOtp failed:", error.message);
-        return { ok: false, errorCode: "verify_failed" };
+        return { ok: false, errorCode: mapSupabaseAuthErrorCode(error.message) };
       }
       return { ok: true };
     }
@@ -48,7 +51,8 @@ export async function completeAuthFromParsed(
         params.errorCode ?? "",
         params.errorDescription ?? "",
       );
-      return { ok: false, errorCode: "exchange_failed" };
+      const text = `${params.errorCode ?? ""} ${params.errorDescription ?? ""} ${params.error}`;
+      return { ok: false, errorCode: mapSupabaseAuthErrorCode(text) };
     }
     case "none":
       return { ok: false, errorCode: "missing_params" };
