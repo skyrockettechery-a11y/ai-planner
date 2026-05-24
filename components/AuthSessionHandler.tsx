@@ -2,14 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { useSupabasePublicConfig } from "@/components/SupabaseConfigProvider";
+import { completeAuthFromParsed } from "@/lib/auth/completeAuth";
 import { AUTH_ERROR_PARAM } from "@/lib/auth/errors";
-import { parseEmailOtpType } from "@/lib/auth/otpType";
-import { hasClientAuthParamsInUrl } from "@/lib/auth/urlParams";
+import {
+  getAuthParamNames,
+  hasRecognizedAuthParams,
+  parseAuthParamsFromUrl,
+  snapshotAuthUrlDebug,
+} from "@/lib/auth/parseAuthParams";
+import { captureAuthUrlOnLanding } from "@/lib/auth/urlParams";
 import { createBrowserClientFromConfig } from "@/lib/supabase/client";
 
 /**
- * Handles auth params that never reach the server (hash tokens) or land on "/"
- * when the email app opens the site URL directly (common on mobile).
+ * Handles auth params in query or hash on any route (common on mobile email apps).
+ * Hash fragments never reach the server — this client handler is required.
  */
 export function AuthSessionHandler({
   onCompletingChange,
@@ -24,7 +30,14 @@ export function AuthSessionHandler({
   }, [status, onCompletingChange]);
 
   useEffect(() => {
-    if (!config || !hasClientAuthParamsInUrl()) {
+    captureAuthUrlOnLanding();
+
+    if (!config) {
+      return;
+    }
+
+    const initialUrl = new URL(window.location.href);
+    if (!hasRecognizedAuthParams(initialUrl)) {
       return;
     }
 
@@ -35,72 +48,55 @@ export function AuthSessionHandler({
       setStatus("working");
 
       const url = new URL(window.location.href);
+      const parsed = parseAuthParamsFromUrl(url);
+      const result = await completeAuthFromParsed(supabase, parsed);
 
-      const hashParams = new URLSearchParams(
-        url.hash.startsWith("#") ? url.hash.slice(1) : url.hash,
+      const names = getAuthParamNames(url);
+      snapshotAuthUrlDebug(url.href);
+
+      const cleanUrl = new URL(url.pathname, url.origin);
+      for (const [key, value] of url.searchParams.entries()) {
+        if (
+          key !== AUTH_ERROR_PARAM &&
+          !key.startsWith("auth_debug_") &&
+          key !== "code" &&
+          key !== "token_hash" &&
+          key !== "token" &&
+          key !== "type" &&
+          key !== "error" &&
+          key !== "error_code" &&
+          key !== "error_description"
+        ) {
+          cleanUrl.searchParams.set(key, value);
+        }
+      }
+
+      if (result.ok) {
+        window.history.replaceState(null, "", cleanUrl.toString());
+        await supabase.auth.getSession();
+        return;
+      }
+
+      console.error(
+        "[AuthSessionHandler] Auth failed:",
+        result.errorCode,
+        "path:",
+        names.path,
+        "query keys:",
+        names.query.join(",") || "(none)",
+        "hash keys:",
+        names.hash.join(",") || "(none)",
       );
-      const accessToken = hashParams.get("access_token");
-      const refreshToken = hashParams.get("refresh_token");
 
-      if (accessToken && refreshToken) {
-        const { error } = await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken,
-        });
-        url.hash = "";
-        window.history.replaceState(null, "", `${url.pathname}${url.search}`);
-
-        if (error) {
-          console.error(
-            "[AuthSessionHandler] setSession failed:",
-            error.message,
-          );
-          url.searchParams.set(AUTH_ERROR_PARAM, "session_failed");
-          window.history.replaceState(null, "", url.toString());
-        } else {
-          await supabase.auth.getSession();
-        }
-        return;
+      cleanUrl.searchParams.set(AUTH_ERROR_PARAM, result.errorCode);
+      cleanUrl.searchParams.set("auth_debug_path", names.path);
+      if (names.query.length > 0) {
+        cleanUrl.searchParams.set("auth_debug_q", names.query.join(","));
       }
-
-      const code = url.searchParams.get("code");
-      if (code && url.pathname === "/") {
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
-        url.searchParams.delete("code");
-        window.history.replaceState(null, "", `${url.pathname}${url.search}`);
-
-        if (error) {
-          console.error(
-            "[AuthSessionHandler] exchangeCodeForSession failed:",
-            error.message,
-          );
-          url.searchParams.set(AUTH_ERROR_PARAM, "exchange_failed");
-          window.history.replaceState(null, "", url.toString());
-        } else {
-          await supabase.auth.getSession();
-        }
-        return;
+      if (names.hash.length > 0) {
+        cleanUrl.searchParams.set("auth_debug_h", names.hash.join(","));
       }
-
-      const tokenHash = url.searchParams.get("token_hash");
-      const otpType = parseEmailOtpType(url.searchParams.get("type"));
-      if (tokenHash && otpType && url.pathname === "/") {
-        const { error } = await supabase.auth.verifyOtp({
-          token_hash: tokenHash,
-          type: otpType,
-        });
-        url.searchParams.delete("token_hash");
-        url.searchParams.delete("type");
-        window.history.replaceState(null, "", `${url.pathname}${url.search}`);
-
-        if (error) {
-          console.error("[AuthSessionHandler] verifyOtp failed:", error.message);
-          url.searchParams.set(AUTH_ERROR_PARAM, "verify_failed");
-          window.history.replaceState(null, "", url.toString());
-        } else {
-          await supabase.auth.getSession();
-        }
-      }
+      window.history.replaceState(null, "", cleanUrl.toString());
     };
 
     void run().finally(() => {

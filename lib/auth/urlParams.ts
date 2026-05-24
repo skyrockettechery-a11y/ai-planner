@@ -1,20 +1,18 @@
 import { AUTH_ERROR_PARAM } from "@/lib/auth/errors";
 import { isAuthErrorCode, getAuthErrorMessage } from "@/lib/auth/errors";
+import {
+  hasRecognizedAuthParams,
+  snapshotAuthUrlDebug,
+} from "@/lib/auth/parseAuthParams";
 
 export function hasClientAuthParamsInUrl(): boolean {
   if (typeof window === "undefined") return false;
+  return hasRecognizedAuthParams(new URL(window.location.href));
+}
 
-  const url = new URL(window.location.href);
-  if (url.hash.includes("access_token=")) return true;
-  if (url.pathname === "/" && url.searchParams.get("code")) return true;
-  if (
-    url.pathname === "/" &&
-    url.searchParams.get("token_hash") &&
-    url.searchParams.get("type")
-  ) {
-    return true;
-  }
-  return false;
+export function captureAuthUrlOnLanding(): void {
+  if (typeof window === "undefined") return;
+  snapshotAuthUrlDebug();
 }
 
 export function getAuthErrorFromUrl(): string | null {
@@ -33,5 +31,8 @@ export function clearAuthErrorFromUrl(): void {
   const url = new URL(window.location.href);
   if (!url.searchParams.has(AUTH_ERROR_PARAM)) return;
   url.searchParams.delete(AUTH_ERROR_PARAM);
+  url.searchParams.delete("auth_debug_q");
+  url.searchParams.delete("auth_debug_h");
+  url.searchParams.delete("auth_debug_path");
   window.history.replaceState(null, "", `${url.pathname}${url.search}`);
 }
