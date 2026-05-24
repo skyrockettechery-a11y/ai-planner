@@ -42,6 +42,11 @@ export function getServerDoingNowSnapshot(): null {
   return null;
 }
 
+export function reloadDoingNowFromStorage(): void {
+  doingNowId = undefined;
+  emitChange();
+}
+
 export function setDoingNowSnapshot(id: string | null): void {
   if (doingNowId === id) return;
   doingNowId = id;

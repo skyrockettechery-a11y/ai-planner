@@ -142,3 +142,28 @@ export function resetDismissedRecommendations(): void {
       : { ...current, dismissedIds: EMPTY_DISMISSED },
   );
 }
+
+export function reloadPlanPreferencesFromStorage(): void {
+  preferences = undefined;
+  emitChange();
+}
+
+export function setPlanPreferencesSnapshot(next: PlanPreferences): void {
+  const normalized: PlanPreferences = {
+    mode: next.mode,
+    hidden: next.hidden,
+    dismissedIds:
+      next.dismissedIds.length === 0 ? EMPTY_DISMISSED : [...next.dismissedIds],
+  };
+  const current = getPreferences();
+  if (
+    current.mode === normalized.mode &&
+    current.hidden === normalized.hidden &&
+    current.dismissedIds === normalized.dismissedIds
+  ) {
+    return;
+  }
+  preferences = normalized;
+  persistPreferences(normalized);
+  emitChange();
+}
