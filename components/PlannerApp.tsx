@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { ActiveTasksSection } from "@/components/ActiveTasksSection";
 import { AuthBar } from "@/components/AuthBar";
+import { AuthErrorBanner } from "@/components/AuthErrorBanner";
+import { AuthSessionHandler } from "@/components/AuthSessionHandler";
 import { CompletedSection } from "@/components/CompletedSection";
 import { DailyOverview } from "@/components/DailyOverview";
 import { DoingNowSection } from "@/components/DoingNowSection";
@@ -50,8 +52,9 @@ export function PlannerApp({ devSupabaseDiagnostic = null }: PlannerAppProps) {
   const [importDismissedForUserId, setImportDismissedForUserId] = useState<
     string | null
   >(null);
+  const [authCompleting, setAuthCompleting] = useState(false);
 
-  const ready = hydrated && !authLoading;
+  const ready = hydrated && !authLoading && !authCompleting;
   useCloudSync(user?.id, ready && Boolean(user));
 
   const activeTasks = getActiveTasks(tasks);
@@ -111,6 +114,8 @@ export function PlannerApp({ devSupabaseDiagnostic = null }: PlannerAppProps) {
             Capture tasks, auto-classify by priority, and track your day.
           </p>
         </div>
+        <AuthSessionHandler onCompletingChange={setAuthCompleting} />
+        <AuthErrorBanner />
         <AuthBar
           configured={configured}
           loading={authLoading}

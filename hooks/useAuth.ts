@@ -34,9 +34,28 @@ export function useAuth() {
       setLoading(false);
     });
 
+    const refreshSession = () => {
+      void supabase.auth.getSession().then(({ data }) => {
+        if (!mounted) return;
+        setUser(data.session?.user ?? null);
+        setLoading(false);
+      });
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        refreshSession();
+      }
+    };
+
+    window.addEventListener("focus", refreshSession);
+    document.addEventListener("visibilitychange", handleVisibility);
+
     return () => {
       mounted = false;
       subscription.unsubscribe();
+      window.removeEventListener("focus", refreshSession);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [supabase]);
 
@@ -45,7 +64,7 @@ export function useAuth() {
     const redirectTo = `${window.location.origin}/auth/callback`;
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo },
+      options: { redirectTo: `${redirectTo}?next=/` },
     });
   }, [supabase]);
 
@@ -55,7 +74,7 @@ export function useAuth() {
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=/`,
         },
       });
       return { error: error?.message ?? null };
