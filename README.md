@@ -1,55 +1,39 @@
 # AI Planner
 
-A minimal, local-first task planner with Eisenhower quadrant classification, rule-based auto-sorting, and a daily focus assistant. Built with Next.js App Router, TypeScript, and Tailwind CSS.
+Capture-first task planning app evolving into an AI Executive Assistant.
 
-## Features
+**Production:** https://ai-planner-taupe.vercel.app
 
-- **Tasks** — Add, edit, delete, complete; optional notes and due dates
-- **Quadrants** — Important/Urgent matrix with keyword-based auto-classification
-- **Views** — Active tasks in quadrant grid or sortable list (due date, importance, urgency)
-- **Today's Plan** — Top 3 recommended tasks, focus summary, overload/urgency warnings
-- **Persistence** — `localStorage` (no backend, auth, or API keys)
-
-## Getting started
+## Quick start
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
-
-### Scripts
+Open http://localhost:3000. For cloud sync locally, see [docs/DEPLOYMENT_GUIDE.md](./docs/DEPLOYMENT_GUIDE.md).
 
 | Command | Description |
 |---------|-------------|
 | `npm run dev` | Development server |
 | `npm run build` | Production build |
-| `npm run start` | Run production server |
 | `npm run lint` | ESLint |
-
-## Project structure
-
-```
-app/           Next.js routes and global styles
-components/    UI (PlannerApp, forms, quadrant board, today's plan, …)
-hooks/         useTasks (localStorage-backed task state)
-lib/           classify, sort, daily plan, storage, task store
-types/         Task, view mode, daily plan types
-```
 
 ## Documentation
 
-| File | Purpose |
-|------|---------|
-| `PROJECT_CONSTITUTION.md` | Product goals, MVP scope, tech stack |
-| `AGENT_RULES.md` | Agent autonomy and coding standards |
-| `MVP_SPEC.md` | Full MVP specification (updated through Mission 03) |
-| `MISSION_01.md` … `MISSION_04.md` | Milestone specs and implementation status |
+**New here?** Humans → [docs/PROJECT_STATUS.md](./docs/PROJECT_STATUS.md) · AI assistants → [docs/AI_CONTEXT_FOR_NEW_CHAT.md](./docs/AI_CONTEXT_FOR_NEW_CHAT.md)
 
-## Missions
+| Document | Purpose |
+|----------|---------|
+| [AI_CONTEXT_FOR_NEW_CHAT.md](./docs/AI_CONTEXT_FOR_NEW_CHAT.md) | Fast onboarding for AI assistants |
+| [PROJECT_STATUS.md](./docs/PROJECT_STATUS.md) | Current status and capabilities |
+| [AI_PLANNER_VISION.md](./docs/AI_PLANNER_VISION.md) | Long-term product direction |
+| [UX_PRINCIPLES.md](./docs/UX_PRINCIPLES.md) | Permanent UX philosophy |
+| [DECISIONS.md](./docs/DECISIONS.md) | Why key choices were made |
+| [PRODUCT_ROADMAP.md](./docs/PRODUCT_ROADMAP.md) | Missions and future work |
+| [ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Technical structure |
+| [DEPLOYMENT_GUIDE.md](./docs/DEPLOYMENT_GUIDE.md) | Vercel, Supabase, env vars |
+| [DEVELOPMENT_GUIDELINES.md](./docs/DEVELOPMENT_GUIDELINES.md) | Coding standards, doc maintenance |
+| [KNOWN_ISSUES.md](./docs/KNOWN_ISSUES.md) | Auth, sync, deployment caveats |
 
-- **Mission 01** — MVP foundation (complete)
-- **Mission 02** — Quadrant / List toggle and sorting (complete)
-- **Mission 03** — Daily Plan Assistant (complete)
-- **Mission 04** — Reserved; not yet defined (see `MISSION_04.md`)
+Mission specs: `MISSION_01.md` … `MISSION_10.md` · Legacy: [PROJECT_CONSTITUTION.md](./PROJECT_CONSTITUTION.md), [AGENT_RULES.md](./AGENT_RULES.md), [MVP_SPEC.md](./MVP_SPEC.md)
