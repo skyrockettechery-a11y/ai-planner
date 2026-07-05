@@ -130,6 +130,8 @@ export function PlannerApp({ devSupabaseDiagnostic = null }: PlannerAppProps) {
         />
       </header>
 
+      <TaskForm onAdd={addTask} />
+
       {showImportBanner && (
         <ImportLocalBanner
           importableCount={importableCount}
@@ -151,8 +153,6 @@ export function PlannerApp({ devSupabaseDiagnostic = null }: PlannerAppProps) {
       />
 
       <TodaysPlan activeTasks={activeTasks} />
-
-      <TaskForm onAdd={addTask} />
 
       <ActiveTasksSection
         tasks={activeTasks}
