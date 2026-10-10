@@ -80,11 +80,59 @@ Every module in `lib/googleCalendar/`, plus `lib/supabase/admin.ts` and `lib/sup
 Creating/editing/deleting events · two-way sync · automatic time blocking · task ↔ event sync · recurring-event logic · webhooks · automatic replanning · Muse integration · LLM scheduling · major UI redesign · auth replacement. Calendar events are never converted into tasks.
 
 ## Validation
-- `npm run lint` and `npm run build` pass
+- `npm run lint`, `npm run typecheck` and `npm run build` pass (CI on every PR update)
+- `npm audit --omit=dev` reports 0 production vulnerabilities (Next.js 16.3.8)
 - Existing magic-link login and task sync unchanged
 - Calendar data scoped to the signed-in user; no token reaches the browser
 - Callback failure, denied consent, missing scope and disconnected states show clear messages
 - No credentials in client bundles or repository files
+
+## Manual acceptance tests (Sam, real credentials)
+CI and the agent's mocked tests cannot exercise real Google or Supabase responses. Before merging (or before exposing the feature in production), Sam runs these with real credentials. **Secrets are entered by Sam directly from Bitwarden into `.env.local` or the Vercel dashboard; they are never pasted into GitHub, PRs, docs or AI chats.**
+
+**Environment:** prefer `http://localhost:3000` (`npm run dev` or `npm run build && npm start`) with `.env.local`. Don't give Vercel *Preview* deployments production secrets; preview hostnames aren't registered redirect URIs anyway. Use two Google accounts (A and B) and two browsers (or one normal and one private window). Record the result of each step (pass/fail plus notes) in a PR comment.
+
+**0. Configuration**
+- [ ] All five variables are set (`SUPABASE_SECRET_KEY` is the `sb_secret_...` key; `SUPABASE_SERVICE_ROLE_KEY` is removed). The card shows **Connect Google Calendar**, not "not configured".
+- [ ] If it does say "not configured", the server log line `[google-calendar/status] Not configured:` names the variable to fix.
+
+**1. Connect (user A)**
+- [ ] Sign in with a magic link → Connect → Google consent shows only the free/busy permission → back in the app, the banner says "Google Calendar connected."
+- [ ] Supabase → Table editor → `google_calendar_connections` has one row for A. `refresh_token_ciphertext` starts with `v1.` and isn't readable; `scope` contains `calendar.freebusy`.
+- [ ] Denied consent (Cancel on Google's screen) → "access was not granted" banner, no row.
+- [ ] Free/busy checkbox unticked on the consent screen → "Free/busy permission wasn't granted" banner, no row.
+
+**2. Busy times**
+- [ ] Today / Tomorrow / Next 7 days match A's primary Google Calendar. Check a timed event, an all-day event, an event crossing midnight, and overlapping events.
+- [ ] An event on a **secondary** calendar is *not* shown (expected), and the "primary Google Calendar only" caption is visible.
+- [ ] An event marked "Free" (transparent) in Google isn't shown as busy.
+
+**3. Disconnect and reconnect**
+- [ ] Disconnect → the card returns to Connect, the row is deleted, and AI Planner is no longer listed at <https://myaccount.google.com/permissions> (it may take a minute).
+- [ ] Connect again → works, and a new row is created.
+
+**4. Revoke at Google**
+- [ ] Remove AI Planner at <https://myaccount.google.com/permissions> → choose a range in the app → "access expired or was revoked" message, the card returns to Connect, the row is deleted.
+- [ ] Reconnect → works.
+
+**5. Account isolation**
+- [ ] In a second browser, sign in as B → the card shows Connect (not A's data). Connect B's Google account → B sees only B's busy times; A still sees only A's.
+- [ ] User mismatch: start Connect as A, then sign in as B in the same browser before finishing consent → "signed in as a different AI Planner user" banner, no row stored for either.
+- [ ] Optional: a query with the anon key (e.g. `select` from `google_calendar_connections` in the app's browser console via the Supabase client) is refused.
+
+**6. Error handling (optional, reversible)**
+- [ ] Temporarily disable the Google Calendar API in Google Cloud → choose a range → "isn't set up correctly on the server" message, and the card stays connected (the row is kept). Re-enable the API → works again.
+
+**7. Regression (existing features)**
+- [ ] Magic-link sign-in on desktop and mobile; sign-out.
+- [ ] Add, edit, complete and restore tasks; sync between two browsers after refresh.
+- [ ] Signed-out (localStorage) mode still works, and the Calendar card is hidden when signed out.
+
+**8. Secret hygiene**
+- [ ] Browser devtools → Network: `/api/google-calendar/*` responses contain no tokens; page source and JS contain no `sb_secret_`, client secret or encryption key.
+- [ ] Server logs show only status codes, reason codes and variable names, never token or key values.
+
+**Note:** while the OAuth consent screen is in *Testing* mode, Google expires refresh tokens after 7 days, which looks like test 4. Publish the consent screen for durable connections.
 
 ## Implementation Notes (why)
 - **Secret-key admin client + deny-all RLS** instead of user-readable rows: even encrypted ciphertext never reaches the browser, and no SECURITY DEFINER RPC surface is exposed.

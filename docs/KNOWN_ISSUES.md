@@ -80,6 +80,24 @@ Documented problems, causes, and workarounds encountered during development and 
 
 ---
 
+### Dev-only `npm audit` findings
+
+**Symptom:** `npm audit` (including dev dependencies) reports high-severity advisories in `brace-expansion`, `braces`/`micromatch`/`fast-glob`, `js-yaml`, `browserslist`, `@babel/core`.
+
+**Cause:** Transitive dependencies of ESLint, `eslint-config-next` and the TypeScript/Tailwind build tooling. They run only on developer machines and in CI against this repo's own code; none ship in the deployed app. `npm audit --omit=dev` reports **0** vulnerabilities (since Next.js 16.3.8, Mission 11).
+
+**Fix:** Not urgent. The `braces` chain's only suggested fix downgrades `eslint-config-next` to 14.x (breaking), so it waits for upstream. The others can be lifted with a non-forced `npm audit fix` in a separate dependency-maintenance change. Never use `npm audit fix --force`.
+
+### `middleware` file convention deprecated (Next.js 16)
+
+**Symptom:** `next build` warns: *The "middleware" file convention is deprecated. Please use "proxy" instead.*
+
+**Cause:** Next.js 16 renamed `middleware.ts` to `proxy.ts`. The existing middleware still works (session refresh, sign-in `?code=` redirect).
+
+**Fix:** Planned as a separate mission. Renaming touches Supabase Auth session handling, so it needs its own regression test of sign-in and sync.
+
+---
+
 ## Sync & Session
 
 ### Refresh-based sync only (not realtime)

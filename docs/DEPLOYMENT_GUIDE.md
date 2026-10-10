@@ -127,6 +127,8 @@ Add them to `.env.local` locally and to Vercel (Production; Preview if used). Ke
 
 If the card says "not configured", the server log line `[google-calendar/status] Not configured:` lists which variables are missing or malformed (names only).
 
+After setup, run the real-credential acceptance checklist in [MISSION_11.md](../MISSION_11.md#manual-acceptance-tests-sam-real-credentials), preferably on localhost first.
+
 ---
 
 ## Vercel Deployment

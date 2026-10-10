@@ -121,12 +121,16 @@ export function useGoogleCalendar() {
           if (code === "reauth_required" || code === "not_connected") {
             markDisconnected();
           }
+          // Drop the previous range's results so they can't be mistaken for
+          // the range that just failed.
+          setBusy(null);
           setBusyError(CALENDAR_ERROR_MESSAGES[code]);
           return;
         }
         const body = (await response.json()) as BusyResponse;
         setBusy({ range, days: groupBusyByDay(body.busy, planWindow.days) });
       } catch {
+        setBusy(null);
         setBusyError(CALENDAR_ERROR_MESSAGES.unknown);
       } finally {
         setBusyLoading(false);
@@ -160,6 +164,9 @@ export function useGoogleCalendar() {
   }, [loadBusy]);
 
   const connect = useCallback(() => {
+    // A full document navigation is required: this API route redirects
+    // off-site to Google's consent screen, which router.push() can't follow.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.assign("/api/google-calendar/connect");
   }, []);
 
