@@ -1,0 +1,192 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import {
+  computeCalendarWindow,
+  groupBusyByDay,
+  type DayBusy,
+} from "@/lib/calendarWindow";
+import {
+  CALENDAR_ERROR_MESSAGES,
+  isCalendarErrorCode,
+  type BusyResponse,
+  type CalendarErrorCode,
+  type CalendarRange,
+  type CalendarStatus,
+} from "@/types/calendar";
+
+/**
+ * Client state for Google Calendar availability (Mission 11).
+ * Talks only to AI Planner's own /api/google-calendar/* routes; no Google
+ * credentials or tokens ever reach the browser.
+ */
+
+const CONNECTED_PARAM = "calendar";
+const ERROR_PARAM = "calendar_error";
+
+export type CalendarFeedback =
+  | { kind: "connected"; message: string }
+  | { kind: "error"; message: string };
+
+function readFeedbackFromUrl(): CalendarFeedback | null {
+  if (typeof window === "undefined") return null;
+  const params = new URL(window.location.href).searchParams;
+  if (params.get(CONNECTED_PARAM) === "connected") {
+    return { kind: "connected", message: "Google Calendar connected." };
+  }
+  const error = params.get(ERROR_PARAM);
+  if (error) {
+    const code: CalendarErrorCode = isCalendarErrorCode(error) ? error : "unknown";
+    return { kind: "error", message: CALENDAR_ERROR_MESSAGES[code] };
+  }
+  return null;
+}
+
+function cleanFeedbackFromUrl(): void {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has(CONNECTED_PARAM) && !url.searchParams.has(ERROR_PARAM)) {
+    return;
+  }
+  url.searchParams.delete(CONNECTED_PARAM);
+  url.searchParams.delete(ERROR_PARAM);
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
+async function readErrorCode(response: Response): Promise<CalendarErrorCode> {
+  try {
+    const body = (await response.json()) as { error?: unknown };
+    return isCalendarErrorCode(body.error) ? body.error : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+export interface BusyState {
+  range: CalendarRange;
+  days: DayBusy[];
+}
+
+export function useGoogleCalendar() {
+  const [feedback, setFeedback] = useState<CalendarFeedback | null>(() =>
+    readFeedbackFromUrl(),
+  );
+  const [status, setStatus] = useState<CalendarStatus | null>(null);
+  const [statusLoading, setStatusLoading] = useState(true);
+  const [statusError, setStatusError] = useState<string | null>(null);
+
+  const [busy, setBusy] = useState<BusyState | null>(null);
+  const [busyLoading, setBusyLoading] = useState(false);
+  const [busyError, setBusyError] = useState<string | null>(null);
+  const [disconnecting, setDisconnecting] = useState(false);
+
+  const markDisconnected = useCallback(() => {
+    setBusy(null);
+    setStatus((current) =>
+      current ? { ...current, connected: false, connectedAt: null } : current,
+    );
+  }, []);
+
+  const loadBusy = useCallback(
+    async (range: CalendarRange) => {
+      const planWindow = computeCalendarWindow(range, new Date());
+      setBusyLoading(true);
+      setBusyError(null);
+      try {
+        const query = new URLSearchParams({
+          timeMin: planWindow.timeMin,
+          timeMax: planWindow.timeMax,
+        });
+        const response = await fetch(`/api/google-calendar/busy?${query}`, {
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          const code = await readErrorCode(response);
+          if (code === "reauth_required" || code === "not_connected") {
+            markDisconnected();
+          }
+          setBusyError(CALENDAR_ERROR_MESSAGES[code]);
+          return;
+        }
+        const body = (await response.json()) as BusyResponse;
+        setBusy({ range, days: groupBusyByDay(body.busy, planWindow.days) });
+      } catch {
+        setBusyError(CALENDAR_ERROR_MESSAGES.unknown);
+      } finally {
+        setBusyLoading(false);
+      }
+    },
+    [markDisconnected],
+  );
+
+  const loadStatus = useCallback(async () => {
+    try {
+      const response = await fetch("/api/google-calendar/status", {
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        const code = await readErrorCode(response);
+        setStatusError(CALENDAR_ERROR_MESSAGES[code]);
+        return;
+      }
+      const body = (await response.json()) as CalendarStatus;
+      setStatus(body);
+      setStatusError(null);
+      if (body.connected) {
+        await loadBusy("today");
+      }
+    } catch {
+      setStatusError(CALENDAR_ERROR_MESSAGES.unknown);
+    } finally {
+      setStatusLoading(false);
+    }
+  }, [loadBusy]);
+
+  useEffect(() => {
+    cleanFeedbackFromUrl();
+    void loadStatus();
+  }, [loadStatus]);
+
+  const connect = useCallback(() => {
+    window.location.assign("/api/google-calendar/connect");
+  }, []);
+
+  const disconnect = useCallback(async () => {
+    setDisconnecting(true);
+    setBusyError(null);
+    try {
+      const response = await fetch("/api/google-calendar/disconnect", {
+        method: "POST",
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        const code = await readErrorCode(response);
+        setBusyError(CALENDAR_ERROR_MESSAGES[code]);
+        return;
+      }
+      markDisconnected();
+      setFeedback(null);
+    } catch {
+      setBusyError(CALENDAR_ERROR_MESSAGES.unknown);
+    } finally {
+      setDisconnecting(false);
+    }
+  }, [markDisconnected]);
+
+  const dismissFeedback = useCallback(() => setFeedback(null), []);
+
+  return {
+    feedback,
+    dismissFeedback,
+    status,
+    statusLoading,
+    statusError,
+    busy,
+    busyLoading,
+    busyError,
+    disconnecting,
+    connect,
+    disconnect,
+    loadBusy,
+  };
+}

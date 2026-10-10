@@ -19,6 +19,12 @@ Missions are small, complete milestones. Each mission ships working software and
 | 09 | Documentation Archive | `docs/` archive, README links |
 | 10 | Documentation Knowledge Base | DECISIONS, UX_PRINCIPLES, AI onboarding guide |
 
+## In Review
+
+| Mission | Name | Summary |
+|---------|------|---------|
+| 11 | Google Calendar Phase 1 | Separate Google OAuth (`calendar.freebusy`), encrypted server-side token, busy-period view |
+
 ---
 
 ## Future Missions (Planned, Not Started)
@@ -33,7 +39,7 @@ Priority order is indicative — the human sets direction before each mission.
 | **Google OAuth** | Finish Google provider setup; enable one-tap Google sign-in |
 | **Realtime sync** | Supabase realtime subscriptions instead of refresh-only |
 | **Real AI planning assistant** | LLM-backed classification, recommendations, and planning |
-| **Calendar integration** | Google Calendar (or similar) for time-aware planning |
+| **Calendar Phase 2** | Use busy periods in Today's Plan (e.g. available focus time); later: time blocking, event write-back |
 | **Weekly review** | Reflect on completion patterns and plan the week ahead |
 
 ---
@@ -47,7 +53,7 @@ Priority order is indicative — the human sets direction before each mission.
   │
   └──► 07 Cloud Sync ──► 08 Quick Capture ──► 09–10 Docs
                                                   │
-                                                  └──► Future: OAuth, Realtime, AI, Calendar…
+                                                  └──► 11 Calendar Phase 1 ──► Future: OAuth, Realtime, AI, Calendar Phase 2…
 ```
 
 - **Cloud sync (07)** depends on deployment (06) for cross-device testing

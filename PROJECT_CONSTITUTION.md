@@ -12,8 +12,11 @@ Help users quickly capture tasks, automatically organize them, and review execut
 ## Automation Goal
 Maximize AI agent autonomy. The human controls direction, reviews results, and makes final product decisions. AI agents handle implementation, refactoring, testing, and documentation within approved boundaries.
 
-## MVP Scope
+## MVP Scope (historical)
 The first version should be local-first and simple.
+
+> The MVP scope below describes the original Mission 01 baseline. Later
+> owner-approved missions extended it — see **Current Architecture** below.
 
 Included:
 - Add tasks
@@ -39,7 +42,15 @@ Excluded for MVP:
 - TypeScript
 - Tailwind CSS
 - App Router
-- localStorage first
+- localStorage first (anonymous use), Supabase when signed in
+
+## Current Architecture (amended October 2026)
+The MVP exclusions above have been lifted by explicit owner approval, one bounded mission at a time:
+- **Login** — Supabase Auth (email magic link; Supabase Google sign-in button) since Mission 07
+- **Database** — Supabase PostgreSQL (`tasks`, `user_preferences`) with Row Level Security since Mission 07
+- **Google Calendar integration** — Phase 1 (read-only free/busy availability) approved in Mission 11
+
+The app still works without sign-in via localStorage. AI Planner remains the source of truth for tasks; Google Calendar is an external availability source only. Still excluded unless a mission scopes them: real OpenAI/LLM API, notifications, native mobile app, writing to Google Calendar.
 
 ## UI Principle
 Minimal, calm, fast, and practical. Avoid visual complexity.

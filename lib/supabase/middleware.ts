@@ -32,7 +32,15 @@ export async function updateSession(request: NextRequest) {
 
   const url = request.nextUrl;
 
-  if (hasRecognizedAuthParams(url) && url.pathname !== "/auth/callback") {
+  // Google Calendar OAuth (Mission 11) also returns `?code=`; it is not a
+  // Supabase sign-in and must reach its own route handler untouched.
+  const isGoogleCalendarRoute = url.pathname.startsWith("/api/google-calendar/");
+
+  if (
+    hasRecognizedAuthParams(url) &&
+    url.pathname !== "/auth/callback" &&
+    !isGoogleCalendarRoute
+  ) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/auth/callback";
     return NextResponse.redirect(redirectUrl);

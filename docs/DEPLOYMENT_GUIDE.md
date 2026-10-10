@@ -68,6 +68,14 @@ This creates:
 - `public.tasks` with RLS policies
 - `public.user_preferences` with RLS policies
 
+For Google Calendar (Mission 11), also run:
+
+```
+supabase/migrations/002_google_calendar_connections.sql
+```
+
+This creates `public.google_calendar_connections` (RLS on, no policies, browser roles revoked).
+
 ### 3. Configure Auth
 
 **Email magic link (working today):**
@@ -84,6 +92,36 @@ This creates:
 3. Enable the provider in Supabase
 
 Until Google is configured, use email magic link.
+
+---
+
+## Google Calendar Setup (Mission 11)
+
+Separate from Supabase sign-in. Skip this section to run without Calendar — the card will say "not configured".
+
+### Google Cloud Console
+
+1. Create/select a project → **APIs & Services → Library** → enable **Google Calendar API**
+2. **OAuth consent screen** → External (or Internal for Workspace) → add scope `https://www.googleapis.com/auth/calendar.freebusy` → add test users while in Testing mode
+3. **Credentials → Create credentials → OAuth client ID → Web application**
+4. **Authorized redirect URIs:**
+   - `https://ai-planner-taupe.vercel.app/api/google-calendar/callback`
+   - `http://localhost:3000/api/google-calendar/callback`
+5. Copy the client id and secret
+
+Preview deployments use different hostnames; either add each preview URL or test Calendar on production/localhost only.
+
+### Environment variables (server-only — never prefix with `NEXT_PUBLIC_`)
+
+```env
+GOOGLE_CALENDAR_CLIENT_ID=...apps.googleusercontent.com
+GOOGLE_CALENDAR_CLIENT_SECRET=...
+GOOGLE_TOKEN_ENCRYPTION_KEY=   # openssl rand -base64 32
+SUPABASE_SERVICE_ROLE_KEY=     # Supabase → Settings → API → service_role
+# GOOGLE_CALENDAR_REDIRECT_URI=https://ai-planner-taupe.vercel.app/api/google-calendar/callback  (optional)
+```
+
+Add them to `.env.local` locally and to Vercel (Production; Preview if used). Changing `GOOGLE_TOKEN_ENCRYPTION_KEY` invalidates stored connections — users simply reconnect.
 
 ---
 
@@ -120,6 +158,7 @@ Then on the live URL:
 - [ ] Add / complete / restore tasks work
 - [ ] Sign in with email magic link
 - [ ] Tasks sync after refresh on a second device/browser
+- [ ] (If configured) Connect Google Calendar → busy periods load for Today / Tomorrow / Next 7 days → Disconnect
 
 ---
 

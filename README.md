@@ -36,4 +36,4 @@ Open http://localhost:3000. For cloud sync locally, see [docs/DEPLOYMENT_GUIDE.m
 | [DEVELOPMENT_GUIDELINES.md](./docs/DEVELOPMENT_GUIDELINES.md) | Coding standards, doc maintenance |
 | [KNOWN_ISSUES.md](./docs/KNOWN_ISSUES.md) | Auth, sync, deployment caveats |
 
-Mission specs: `MISSION_01.md` … `MISSION_10.md` · Legacy: [PROJECT_CONSTITUTION.md](./PROJECT_CONSTITUTION.md), [AGENT_RULES.md](./AGENT_RULES.md), [MVP_SPEC.md](./MVP_SPEC.md)
+Mission specs: `MISSION_01.md` … `MISSION_11.md` · Legacy: [PROJECT_CONSTITUTION.md](./PROJECT_CONSTITUTION.md), [AGENT_RULES.md](./AGENT_RULES.md), [MVP_SPEC.md](./MVP_SPEC.md)

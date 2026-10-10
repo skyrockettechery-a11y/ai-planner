@@ -13,7 +13,7 @@
 | URL | https://ai-planner-taupe.vercel.app |
 | Source of truth | **GitHub repo** (not local machines) |
 | Pipeline | GitHub → Vercel · Supabase (Auth + Postgres) |
-| Milestone | Mission 10 complete — first production milestone shipped |
+| Milestone | Mission 10 complete · Mission 11 (Google Calendar Phase 1, free/busy) in review |
 | Stack | Next.js 16 · React 19 · TS · Tailwind 4 · Supabase |
 
 ---
@@ -34,6 +34,7 @@ Every feature must move toward AI Executive Assistant — not generic task manag
 - Active Tasks · Completed Tasks · Doing Now (one task) · Today's Plan
 - Email magic link auth ✅ · Google OAuth ⚠️ (UI only, not configured)
 - Cloud sync ✅ refresh-based · multi-device verified (Zenbook, desktop, iPhone)
+- Google Calendar availability 🟡 Mission 11 — read-only free/busy; Calendar never creates tasks
 
 → Status detail: [PROJECT_STATUS.md](./PROJECT_STATUS.md)
 
@@ -46,7 +47,8 @@ PlannerApp.tsx
   ├─ useTasks / taskStore (localStorage)
   ├─ useAuth → Supabase Auth
   └─ useCloudSync → debounced push, load on login
-Tables: tasks, user_preferences (RLS)
+Tables: tasks, user_preferences (RLS) · google_calendar_connections (server-only)
+Calendar: /api/google-calendar/* → lib/googleCalendar/* (OAuth, encrypted token, FreeBusy)
 "AI" today: lib/classify.ts, lib/dailyPlan.ts (rules, no LLM)
 ```
 
@@ -84,7 +86,7 @@ UI order: Auth → **Add Task** → Overview → Doing Now → Today's Plan → 
 
 - Mission scope only — read active `MISSION_XX.md`
 - Minimal diffs · match existing patterns · no secrets in repo
-- Env: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- Env: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`; Calendar (server-only): see [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md#google-calendar-setup-mission-11)
 - Next.js 16 APIs may differ — check `node_modules/next/dist/docs/`
 - **Before stop:** `npm run lint` + `npm run build`
 - **Stop before git commit** unless user asks

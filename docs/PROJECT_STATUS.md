@@ -1,8 +1,8 @@
 # Project Status
 
-**Last updated:** July 2026  
+**Last updated:** October 2026  
 **Production URL:** https://ai-planner-taupe.vercel.app  
-**Current milestone:** Mission 10 complete
+**Current milestone:** Mission 11 (Google Calendar Phase 1) — in review on `feature/google-calendar-phase1`
 
 ---
 
@@ -26,6 +26,7 @@ AI Planner is a deployed, cross-device task planning app built with Next.js and 
 | Supabase cloud sync | ✅ Complete | Tasks and preferences sync across devices |
 | Email magic link auth | ✅ Complete | Primary auth method in production |
 | Quick capture layout | ✅ Complete | Add Task at top (Mission 08) |
+| Google Calendar availability | 🟡 In review | Phase 1: connect + free/busy view (Mission 11); needs Google Cloud + env setup |
 
 ---
 
@@ -43,7 +44,7 @@ Users can use the app without signing in (local-only mode). Signing in enables c
 ## Cloud Sync
 
 - **Backend:** Supabase Postgres with Row Level Security
-- **Tables:** `tasks`, `user_preferences`
+- **Tables:** `tasks`, `user_preferences` (+ `google_calendar_connections`, server-only, Mission 11)
 - **Sync model:** Refresh-based (load on login, debounced push on local changes)
 - **Verified devices:** Zenbook, desktop, iPhone — same account syncs tasks across phone and desktop
 - **Not yet:** Realtime subscriptions (future mission)
@@ -60,6 +61,12 @@ Users can use the app without signing in (local-only mode). Signing in enables c
 | Backend | Supabase Auth + PostgreSQL |
 
 Local machines are development environments only — not the project source of truth.
+
+---
+
+## Mission 11 — Google Calendar Phase 1 (approved, in review)
+
+Owner-approved milestone: connect Google Calendar with the `calendar.freebusy` scope and show busy periods (today / tomorrow / next 7 days). Read-only; AI Planner stays the source of truth for tasks. See [MISSION_11.md](../MISSION_11.md).
 
 ---
 
@@ -111,7 +118,7 @@ Full index: [README.md](../README.md#documentation)
 
 - Not a realtime-synced app (refresh-based only)
 - Not using a real AI/LLM API (classification and planning are rule-based)
-- Not integrated with Google Calendar
+- Not managing Google Calendar — Phase 1 only reads free/busy availability (no event creation, sync, or time blocking)
 - Not a native mobile app
 
 See [PRODUCT_ROADMAP.md](./PRODUCT_ROADMAP.md) for planned next steps.

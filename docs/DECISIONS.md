@@ -267,6 +267,46 @@ Each entry follows the same structure:
 
 ---
 
+## Integrations
+
+### Google Calendar as a read-only availability source (Mission 11)
+
+**Decision:** Phase 1 connects Google Calendar with only the `calendar.freebusy` scope and shows busy periods. Calendar events never become tasks; AI Planner remains the source of truth for planning.
+
+**Context:** The owner approved Google Calendar as a new milestone. The MVP constitution had excluded it; planning around real-world commitments is part of the North Star.
+
+**Reasoning:**
+- Free/busy is the smallest permission that answers "when am I available?" — no event titles or attendees reach AI Planner
+- Keeping tasks and calendar separate avoids two-way sync conflicts and duplicate data
+- A read-only first step is reversible and easy to reason about
+
+**Trade-offs:**
+- No event details, so the UI can only say "busy", not what the commitment is
+- Only the primary calendar is queried
+
+**Possible future evolution:** Feed busy time into Today's Plan; later time blocking or event write-back would need broader scopes and a dedicated mission.
+
+---
+
+### Separate server-side Google OAuth with encrypted, deny-all token storage
+
+**Decision:** Calendar authorization is its own OAuth flow (not Supabase sign-in). Refresh tokens are AES-256-GCM encrypted and stored in a table with RLS enabled, no policies and browser privileges revoked; only server routes read it via the service-role key, scoped to the verified session user.
+
+**Context:** Supabase's Google sign-in does not give the app durable, server-held Calendar tokens, and the task required that refresh tokens never reach the browser or other users.
+
+**Reasoning:**
+- Deny-all RLS means even ciphertext is unreadable from the browser; no RPC surface to secure
+- Encryption adds defense in depth against DB dumps or future policy mistakes; user id as authenticated data prevents row swapping
+- PKCE + a sealed, user-bound, single-use state cookie protects the callback from CSRF and account mix-ups
+
+**Trade-offs:**
+- Introduces `SUPABASE_SERVICE_ROLE_KEY` and an encryption key as new server secrets
+- Rotating the encryption key disconnects everyone (they reconnect)
+
+**Alternatives avoided:** browser-stored tokens (exposed to JS); encrypted per-browser cookie (no cross-device connection); user-readable rows with column grants (fragile).
+
+---
+
 ## Process
 
 ### Mission-based development with stop-before-commit
