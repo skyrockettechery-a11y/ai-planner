@@ -1,6 +1,8 @@
 /**
  * SERVER ONLY. Request helpers shared by /api/google-calendar/* routes (Mission 11).
  */
+import "server-only";
+
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getSupabasePublicConfig } from "@/lib/supabase/config";

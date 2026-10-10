@@ -117,11 +117,15 @@ Preview deployments use different hostnames; either add each preview URL or test
 GOOGLE_CALENDAR_CLIENT_ID=...apps.googleusercontent.com
 GOOGLE_CALENDAR_CLIENT_SECRET=...
 GOOGLE_TOKEN_ENCRYPTION_KEY=   # openssl rand -base64 32
-SUPABASE_SERVICE_ROLE_KEY=     # Supabase → Settings → API → service_role
+SUPABASE_SECRET_KEY=           # Supabase → Project Settings → API Keys → Secret keys (sb_secret_...)
 # GOOGLE_CALENDAR_REDIRECT_URI=https://ai-planner-taupe.vercel.app/api/google-calendar/callback  (optional)
 ```
 
-Add them to `.env.local` locally and to Vercel (Production; Preview if used). Changing `GOOGLE_TOKEN_ENCRYPTION_KEY` invalidates stored connections — users simply reconnect.
+Add them to `.env.local` locally and to Vercel (Production; Preview if used). Keep real values in the team password manager (Bitwarden) — never in the repo, docs, PRs or chat. Changing `GOOGLE_TOKEN_ENCRYPTION_KEY` invalidates stored connections — users simply reconnect.
+
+`SUPABASE_SECRET_KEY` must be a Supabase **Secret API key** (`sb_secret_...`). The legacy `SUPABASE_SERVICE_ROLE_KEY` (JWT) is no longer read — if it is still set in Vercel or `.env.local`, add `SUPABASE_SECRET_KEY` and remove the old variable. A publishable key or legacy JWT in `SUPABASE_SECRET_KEY` is rejected as "not configured". Supabase also refuses secret keys sent from a browser, so the key only works server-side.
+
+If the card says "not configured", the server log line `[google-calendar/status] Not configured:` lists which variables are missing or malformed (names only).
 
 ---
 
@@ -149,8 +153,11 @@ Push to the connected branch — Vercel rebuilds automatically.
 
 ```bash
 npm run lint
+npm run typecheck
 npm run build
 ```
+
+GitHub Actions (`.github/workflows/ci.yml`) runs the same three checks on every pull request update. It needs no secrets.
 
 Then on the live URL:
 

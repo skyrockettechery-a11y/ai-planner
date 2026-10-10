@@ -1,4 +1,7 @@
-import { getGoogleCalendarConfig } from "@/lib/googleCalendar/config";
+import {
+  describeGoogleCalendarConfigProblems,
+  getGoogleCalendarConfig,
+} from "@/lib/googleCalendar/config";
 import {
   getVerifiedUserId,
   jsonError,
@@ -17,6 +20,11 @@ export async function GET() {
   }
 
   if (!getGoogleCalendarConfig()) {
+    // Variable names only, server log only; the browser just sees configured: false.
+    console.warn(
+      "[google-calendar/status] Not configured:",
+      describeGoogleCalendarConfigProblems().join("; "),
+    );
     return jsonOk<CalendarStatus>({
       configured: false,
       connected: false,

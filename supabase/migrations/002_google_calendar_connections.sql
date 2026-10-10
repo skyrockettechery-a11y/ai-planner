@@ -8,10 +8,10 @@
 --   * Row Level Security is enabled with NO policies, and all table privileges
 --     are revoked from the anon and authenticated roles. The browser (anon key
 --     + user JWT) therefore cannot select, insert, update or delete rows here.
---   * Only server-side route handlers access this table, using the Supabase
---     service-role key (SUPABASE_SERVICE_ROLE_KEY, never exposed to the
---     browser), always filtered by the user id taken from the verified
---     Supabase session.
+--   * Only server-side route handlers access this table, using a Supabase
+--     Secret API key (SUPABASE_SECRET_KEY, sb_secret_..., never exposed to
+--     the browser), always filtered by the user id taken from the verified
+--     Supabase session. (Comment-only change; the SQL is unchanged.)
 --   * Existing tables (tasks, user_preferences) are not modified.
 
 create table if not exists public.google_calendar_connections (

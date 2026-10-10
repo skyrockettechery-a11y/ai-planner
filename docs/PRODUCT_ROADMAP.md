@@ -1,6 +1,6 @@
 # Product Roadmap
 
-Missions are small, complete milestones. Each mission ships working software and stops before git commit unless the human approves.
+Missions are small, complete milestones. Each mission ships working software on a feature branch as a Draft PR; GPT reviews and Sam merges manually.
 
 ---
 
@@ -77,7 +77,7 @@ Priority order is indicative — the human sets direction before each mission.
 1. Write `MISSION_XX.md` with goal, required changes, constraints, and validation
 2. Align with [AI_PLANNER_VISION.md](./AI_PLANNER_VISION.md) and [PROJECT_CONSTITUTION.md](../PROJECT_CONSTITUTION.md)
 3. Keep scope small enough for one autonomous agent run
-4. Stop before git commit; human reviews and commits
+4. Push to the approved feature branch and update the Draft PR; GPT reviews; Sam merges
 
 ---
 

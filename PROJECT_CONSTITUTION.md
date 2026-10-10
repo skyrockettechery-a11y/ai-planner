@@ -58,11 +58,28 @@ Minimal, calm, fast, and practical. Avoid visual complexity.
 ## Development Principle
 Prefer simple working software over complex architecture. Build in small complete milestones, but allow AI agents to complete each milestone autonomously.
 
+## Approved Workflow (amended October 2026)
+
+```
+Claude Cloud → Feature Branch → Draft PR → GPT Review → Sam manually merges
+```
+
+1. **Claude Cloud** implements the approved mission.
+2. **Feature branch** — work happens only on the feature branch approved for that mission (e.g. `feature/google-calendar-phase1`). Claude is authorized to commit and push to that branch.
+3. **Draft PR** — Claude opens (or updates) a Draft pull request into `main`. GitHub Actions CI runs lint, typecheck and build on every update.
+4. **GPT Review** — GPT reviews the Draft PR; Claude addresses findings by pushing further commits to the same branch.
+5. **Sam manually merges** — only Sam (the project owner) marks the PR ready and merges it into `main`.
+
+Claude must **never** merge a pull request, push directly to `main`, or rewrite `main`'s history.
+
 ## Stop Conditions
 AI agents must stop before:
-- Git commit
+- Merging any pull request, or pushing/committing directly to `main`
+- Committing or pushing to any branch other than the approved feature branch
+- Marking a Draft PR ready for review, or opening an additional PR, unless asked
 - Adding paid external services
-- Adding API keys
+- Adding API keys or real credentials to code, docs, PRs or GitHub
+- Configuring deployment secrets (e.g. Vercel environment variables)
 - Changing the core tech stack
 - Deleting major existing code
 - Expanding scope beyond the current mission

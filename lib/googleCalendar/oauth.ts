@@ -4,11 +4,14 @@
  * Separate from Supabase Auth: this never signs the user in to AI Planner,
  * it only grants AI Planner free/busy access to the user's Google Calendar.
  */
+import "server-only";
+
 import { createHash } from "node:crypto";
 import {
   GOOGLE_CALENDAR_FREEBUSY_SCOPE,
   type GoogleCalendarServerConfig,
 } from "@/lib/googleCalendar/config";
+import { GoogleOAuthError } from "@/lib/googleCalendar/errors";
 
 const AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
@@ -48,26 +51,20 @@ interface GoogleTokenResponse {
   error_description?: string;
 }
 
-export class GoogleOAuthError extends Error {
-  constructor(
-    message: string,
-    /** Google's `error` field, e.g. "invalid_grant". */
-    readonly googleError: string | null,
-  ) {
-    super(message);
-    this.name = "GoogleOAuthError";
-  }
-}
-
 async function postTokenEndpoint(
   body: Record<string, string>,
 ): Promise<GoogleTokenResponse> {
-  const response = await fetch(TOKEN_ENDPOINT, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(body).toString(),
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(TOKEN_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(body).toString(),
+      cache: "no-store",
+    });
+  } catch {
+    throw new GoogleOAuthError("Google token endpoint unreachable", null, 0);
+  }
 
   let json: GoogleTokenResponse;
   try {
@@ -81,6 +78,7 @@ async function postTokenEndpoint(
     throw new GoogleOAuthError(
       `Google token endpoint returned ${response.status}`,
       json.error ?? null,
+      response.status,
     );
   }
 
@@ -125,7 +123,7 @@ export async function refreshAccessToken(params: {
   });
 
   if (!json.access_token) {
-    throw new GoogleOAuthError("Google returned no access token", null);
+    throw new GoogleOAuthError("Google returned no access token", null, 200);
   }
   return json.access_token;
 }

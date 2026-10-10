@@ -6,6 +6,8 @@
  * `context` is used as additional authenticated data so a value sealed for
  * one purpose/user cannot be replayed for another.
  */
+import "server-only";
+
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
 const VERSION = "v1";

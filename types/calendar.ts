@@ -39,6 +39,9 @@ export type CalendarErrorCode =
   | "no_refresh_token"
   | "token_exchange_failed"
   | "invalid_range"
+  | "google_config_error"
+  | "google_rate_limited"
+  | "google_unavailable"
   | "google_error"
   | "storage_error"
   | "unknown";
@@ -62,8 +65,15 @@ export const CALENDAR_ERROR_MESSAGES: Record<CalendarErrorCode, string> = {
   token_exchange_failed:
     "Couldn't complete Google Calendar connection. Please try again.",
   invalid_range: "That time range isn't supported.",
-  google_error: "Google Calendar didn't respond as expected. Try again shortly.",
-  storage_error: "Couldn't save the Google Calendar connection. Please try again.",
+  google_config_error:
+    "Google Calendar isn't set up correctly on the server (Google Cloud configuration). Reconnecting won't help; the app owner needs to fix it.",
+  google_rate_limited:
+    "Google Calendar is limiting requests right now. Wait a minute and try again.",
+  google_unavailable:
+    "Google Calendar is temporarily unavailable. Try again shortly.",
+  google_error: "Google Calendar returned an unexpected error. Try again shortly.",
+  storage_error:
+    "Couldn't access the saved Google Calendar connection. Please try again.",
   unknown: "Something went wrong with Google Calendar. Please try again.",
 };
 

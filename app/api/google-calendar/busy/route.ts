@@ -1,7 +1,14 @@
 import type { NextRequest } from "next/server";
 import { getGoogleCalendarConfig } from "@/lib/googleCalendar/config";
-import { GoogleApiError, parseWindow, queryPrimaryBusy } from "@/lib/googleCalendar/freebusy";
-import { GoogleOAuthError, refreshAccessToken } from "@/lib/googleCalendar/oauth";
+import {
+  classifyApiError,
+  classifyOAuthError,
+  describeGoogleError,
+  failureResponse,
+  type GoogleFailureKind,
+} from "@/lib/googleCalendar/errors";
+import { parseWindow, queryPrimaryBusy } from "@/lib/googleCalendar/freebusy";
+import { refreshAccessToken } from "@/lib/googleCalendar/oauth";
 import {
   getVerifiedUserId,
   jsonError,
@@ -16,6 +23,33 @@ import {
 import type { BusyResponse } from "@/types/calendar";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Maps a classified Google failure to the response. Only authorization
+ * failures (revoked/expired grant, missing scope) drop the stored connection
+ * so the UI offers reconnect; configuration, quota and outage errors keep it,
+ * because reconnecting would not help.
+ */
+async function googleFailure(
+  userId: string,
+  kind: GoogleFailureKind,
+  stage: string,
+  error: unknown,
+) {
+  console.error(
+    `[google-calendar/busy] ${stage} failed (${kind}):`,
+    describeGoogleError(error),
+  );
+  if (kind === "authorization") {
+    try {
+      await deleteConnection(userId);
+    } catch {
+      // Ignore; the user is asked to reconnect either way.
+    }
+  }
+  const { code, status } = failureResponse(kind);
+  return jsonError(code, status);
+}
 
 /**
  * Busy periods from the signed-in user's primary Google Calendar.
@@ -70,34 +104,13 @@ export async function GET(request: NextRequest) {
       refreshToken: connection.refreshToken,
     });
   } catch (error) {
-    if (error instanceof GoogleOAuthError && error.googleError === "invalid_grant") {
-      // Revoked or expired by Google: drop the dead connection so the UI
-      // returns to the disconnected state and offers reconnect.
-      try {
-        await deleteConnection(userId);
-      } catch {
-        // Ignore; status will still report reauth on the next attempt.
-      }
-      return jsonError("reauth_required", 401);
-    }
-    console.error(
-      "[google-calendar/busy] Token refresh failed:",
-      error instanceof GoogleOAuthError ? error.googleError ?? error.message : "unknown",
-    );
-    return jsonError("google_error", 502);
+    return googleFailure(userId, classifyOAuthError(error), "Token refresh", error);
   }
 
   try {
     const busy = await queryPrimaryBusy({ accessToken, ...range });
     return jsonOk<BusyResponse>({ ...range, busy });
   } catch (error) {
-    if (error instanceof GoogleApiError && (error.status === 401 || error.status === 403)) {
-      return jsonError("reauth_required", 401);
-    }
-    console.error(
-      "[google-calendar/busy] FreeBusy failed:",
-      error instanceof Error ? error.message : "unknown",
-    );
-    return jsonError("google_error", 502);
+    return googleFailure(userId, classifyApiError(error), "FreeBusy", error);
   }
 }

@@ -89,7 +89,7 @@ UI order: Auth → **Add Task** → Overview → Doing Now → Today's Plan → 
 - Env: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`; Calendar (server-only): see [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md#google-calendar-setup-mission-11)
 - Next.js 16 APIs may differ — check `node_modules/next/dist/docs/`
 - **Before stop:** `npm run lint` + `npm run build`
-- **Stop before git commit** unless user asks
+- **Workflow:** Claude Cloud → feature branch → Draft PR → GPT review → Sam manually merges. Push only to the approved feature branch; never merge or push to `main`
 - **Do not** change auth/sync/UI unless mission requires it
 
 → Standards: [DEVELOPMENT_GUIDELINES.md](./DEVELOPMENT_GUIDELINES.md) · [AGENT_RULES.md](../AGENT_RULES.md)

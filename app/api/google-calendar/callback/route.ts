@@ -2,7 +2,10 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { getGoogleCalendarConfig } from "@/lib/googleCalendar/config";
 import {
-  GoogleOAuthError,
+  classifyOAuthError,
+  describeGoogleError,
+} from "@/lib/googleCalendar/errors";
+import {
   exchangeAuthorizationCode,
   type ExchangedTokens,
   hasFreeBusyScope,
@@ -89,11 +92,20 @@ export async function GET(request: NextRequest) {
       redirectUri: oauthState.redirectUri,
     });
   } catch (error) {
+    const kind = classifyOAuthError(error);
     console.error(
-      "[google-calendar/callback] Token exchange failed:",
-      error instanceof GoogleOAuthError ? error.googleError ?? error.message : "unknown",
+      `[google-calendar/callback] Token exchange failed (${kind}):`,
+      describeGoogleError(error),
     );
-    return finish(origin, "token_exchange_failed");
+    // invalid_grant here means an expired/reused code, so a retry is the fix.
+    return finish(
+      origin,
+      kind === "configuration"
+        ? "google_config_error"
+        : kind === "rate_limited" || kind === "unavailable"
+          ? "google_unavailable"
+          : "token_exchange_failed",
+    );
   }
 
   if (!hasFreeBusyScope(tokens.scope)) {

@@ -7,6 +7,10 @@ import type { CalendarRange } from "@/types/calendar";
 /**
  * Mission 11 — Google Calendar availability (free/busy only).
  * Read-only view of busy periods; never creates tasks or calendar events.
+ *
+ * Only the user's primary Google Calendar is queried, so wording must never
+ * claim the user is "free": an empty primary calendar says nothing about
+ * other calendars.
  */
 
 const RANGE_OPTIONS: { value: CalendarRange; label: string }[] = [
@@ -43,8 +47,8 @@ function DayRow({ entry }: { entry: DayBusy }) {
         <p className="text-sm font-medium text-zinc-900">{entry.day.label}</p>
         <p className="text-xs text-zinc-500">
           {entry.periods.length === 0
-            ? "Free all day"
-            : `Busy ${formatDuration(entry.busyMinutes)}`}
+            ? "No busy times on primary calendar"
+            : `${formatDuration(entry.busyMinutes)} busy`}
         </p>
       </div>
 
@@ -115,16 +119,16 @@ export function CalendarAvailability() {
 
   return (
     <section
-      aria-label="Calendar availability"
+      aria-label="Primary Google Calendar busy times"
       className="rounded-xl border border-zinc-200 bg-white p-4 sm:p-5"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-            Calendar
+            Google Calendar
           </p>
           <h2 className="mt-1 text-lg font-semibold text-zinc-900">
-            Availability
+            Busy times
           </h2>
         </div>
         {connected && (
@@ -171,9 +175,9 @@ export function CalendarAvailability() {
         ) : !connected ? (
           <div className="space-y-2">
             <p className="text-sm text-zinc-600">
-              Connect Google Calendar to see when you&apos;re busy. AI Planner
-              only reads free/busy times — never event details — and
-              doesn&apos;t change your calendar.
+              Connect Google Calendar to see busy times from your primary
+              calendar. AI Planner only reads free/busy times — never event
+              details — and doesn&apos;t change your calendar.
             </p>
             <button
               type="button"
@@ -211,6 +215,12 @@ export function CalendarAvailability() {
                 );
               })}
             </div>
+
+            <p className="text-xs text-zinc-500">
+              Checks your primary Google Calendar only. Other calendars
+              (shared, work, or subscribed) aren&apos;t included, so open time
+              here doesn&apos;t guarantee you&apos;re free.
+            </p>
 
             {busyError && <p className="text-xs text-red-700">{busyError}</p>}
 

@@ -62,6 +62,22 @@ async function readErrorCode(response: Response): Promise<CalendarErrorCode> {
   }
 }
 
+type StatusResult = { status: CalendarStatus } | { error: string };
+
+async function fetchCalendarStatus(): Promise<StatusResult> {
+  try {
+    const response = await fetch("/api/google-calendar/status", {
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      return { error: CALENDAR_ERROR_MESSAGES[await readErrorCode(response)] };
+    }
+    return { status: (await response.json()) as CalendarStatus };
+  } catch {
+    return { error: CALENDAR_ERROR_MESSAGES.unknown };
+  }
+}
+
 export interface BusyState {
   range: CalendarRange;
   days: DayBusy[];
@@ -119,33 +135,29 @@ export function useGoogleCalendar() {
     [markDisconnected],
   );
 
-  const loadStatus = useCallback(async () => {
-    try {
-      const response = await fetch("/api/google-calendar/status", {
-        cache: "no-store",
-      });
-      if (!response.ok) {
-        const code = await readErrorCode(response);
-        setStatusError(CALENDAR_ERROR_MESSAGES[code]);
-        return;
-      }
-      const body = (await response.json()) as CalendarStatus;
-      setStatus(body);
-      setStatusError(null);
-      if (body.connected) {
-        await loadBusy("today");
-      }
-    } catch {
-      setStatusError(CALENDAR_ERROR_MESSAGES.unknown);
-    } finally {
-      setStatusLoading(false);
-    }
-  }, [loadBusy]);
-
   useEffect(() => {
     cleanFeedbackFromUrl();
-    void loadStatus();
-  }, [loadStatus]);
+    // State is only set from the async result, never synchronously in the
+    // effect body; `active` drops results after unmount (or a Strict Mode
+    // re-run).
+    let active = true;
+    void fetchCalendarStatus().then((result) => {
+      if (!active) return;
+      setStatusLoading(false);
+      if ("error" in result) {
+        setStatusError(result.error);
+        return;
+      }
+      setStatus(result.status);
+      setStatusError(null);
+      if (result.status.connected) {
+        void loadBusy("today");
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [loadBusy]);
 
   const connect = useCallback(() => {
     window.location.assign("/api/google-calendar/connect");

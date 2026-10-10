@@ -1,11 +1,13 @@
 /**
  * SERVER ONLY. Persistence for `public.google_calendar_connections` (Mission 11).
  *
- * Uses the service-role client because the table denies all access to the
- * anon/authenticated roles. Every function takes an explicit userId that the
- * caller must have obtained from a verified Supabase session.
+ * Uses the Supabase secret-key (admin) client because the table denies all
+ * access to the anon/authenticated roles. Every function takes an explicit
+ * userId that the caller must have obtained from a verified Supabase session.
  */
-import { createServiceRoleClient } from "@/lib/supabase/admin";
+import "server-only";
+
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { seal, unseal } from "@/lib/googleCalendar/crypto";
 
 const TABLE = "google_calendar_connections";
@@ -47,7 +49,7 @@ export async function saveConnection(params: {
   encryptionKey: Buffer;
 }): Promise<void> {
   const now = new Date().toISOString();
-  const supabase = createServiceRoleClient();
+  const supabase = createSupabaseAdminClient();
   const { error } = await supabase.from(TABLE).upsert(
     {
       user_id: params.userId,
@@ -68,7 +70,7 @@ export async function saveConnection(params: {
 export async function getConnectionMetadata(
   userId: string,
 ): Promise<ConnectionMetadata | null> {
-  const supabase = createServiceRoleClient();
+  const supabase = createSupabaseAdminClient();
   const { data, error } = await supabase
     .from(TABLE)
     .select("connected_at")
@@ -87,7 +89,7 @@ export async function getConnection(
   userId: string,
   encryptionKey: Buffer,
 ): Promise<StoredConnection | null> {
-  const supabase = createServiceRoleClient();
+  const supabase = createSupabaseAdminClient();
   const { data, error } = await supabase
     .from(TABLE)
     .select("refresh_token_ciphertext, scope, connected_at")
@@ -115,7 +117,7 @@ export async function getConnection(
 }
 
 export async function deleteConnection(userId: string): Promise<void> {
-  const supabase = createServiceRoleClient();
+  const supabase = createSupabaseAdminClient();
   const { error } = await supabase.from(TABLE).delete().eq("user_id", userId);
   if (error) throw new Error(`deleteConnection failed: ${error.code ?? "unknown"}`);
 }

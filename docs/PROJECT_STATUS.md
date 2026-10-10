@@ -26,7 +26,7 @@ AI Planner is a deployed, cross-device task planning app built with Next.js and 
 | Supabase cloud sync | ✅ Complete | Tasks and preferences sync across devices |
 | Email magic link auth | ✅ Complete | Primary auth method in production |
 | Quick capture layout | ✅ Complete | Add Task at top (Mission 08) |
-| Google Calendar availability | 🟡 In review | Phase 1: connect + free/busy view (Mission 11); needs Google Cloud + env setup |
+| Google Calendar availability | 🟡 In review | Phase 1: connect + free/busy view of the primary calendar (Mission 11); Google Cloud OAuth and the Supabase migration are done; server env vars (incl. `SUPABASE_SECRET_KEY`) still need to be set per environment |
 
 ---
 
@@ -67,6 +67,8 @@ Local machines are development environments only — not the project source of t
 ## Mission 11 — Google Calendar Phase 1 (approved, in review)
 
 Owner-approved milestone: connect Google Calendar with the `calendar.freebusy` scope and show busy periods (today / tomorrow / next 7 days). Read-only; AI Planner stays the source of truth for tasks. See [MISSION_11.md](../MISSION_11.md).
+
+Owner setup done: Google Cloud OAuth client and `002_google_calendar_connections.sql` migration. Review follow-ups on PR #1: the server admin client now uses a Supabase Secret API key (`SUPABASE_SECRET_KEY`, replacing `SUPABASE_SERVICE_ROLE_KEY`), Google errors are classified (authorization vs configuration vs quota vs outage), the UI no longer implies "free" from the primary calendar alone, server modules use `server-only`, and GitHub Actions CI runs lint/typecheck/build on PRs.
 
 ---
 

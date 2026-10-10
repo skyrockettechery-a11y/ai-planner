@@ -5,8 +5,17 @@
  * inlines them into client bundles. Import only from route handlers or
  * other server-only modules.
  */
-import { getServiceRoleKey } from "@/lib/supabase/admin";
-import { getSupabasePublicConfig } from "@/lib/supabase/config";
+import "server-only";
+
+import {
+  describeSupabaseSecretKeyProblem,
+  isSupabaseAdminConfigured,
+} from "@/lib/supabase/admin";
+import {
+  SUPABASE_ANON_KEY_ENV,
+  SUPABASE_URL_ENV,
+  getSupabasePublicConfig,
+} from "@/lib/supabase/config";
 
 export const GOOGLE_CALENDAR_CLIENT_ID_ENV = "GOOGLE_CALENDAR_CLIENT_ID";
 export const GOOGLE_CALENDAR_CLIENT_SECRET_ENV = "GOOGLE_CALENDAR_CLIENT_SECRET";
@@ -48,13 +57,7 @@ export function getGoogleCalendarConfig(): GoogleCalendarServerConfig | null {
     readEnv(GOOGLE_TOKEN_ENCRYPTION_KEY_ENV),
   );
 
-  if (
-    !clientId ||
-    !clientSecret ||
-    !encryptionKey ||
-    !getServiceRoleKey() ||
-    !getSupabasePublicConfig()
-  ) {
+  if (!clientId || !clientSecret || !encryptionKey || !isSupabaseAdminConfigured()) {
     return null;
   }
 
@@ -64,6 +67,32 @@ export function getGoogleCalendarConfig(): GoogleCalendarServerConfig | null {
     redirectUriOverride: readEnv(GOOGLE_CALENDAR_REDIRECT_URI_ENV),
     encryptionKey,
   };
+}
+
+/**
+ * Which settings are missing or invalid, by variable name only (never
+ * values). For server logs; the browser only ever sees `configured: false`.
+ */
+export function describeGoogleCalendarConfigProblems(): string[] {
+  const problems: string[] = [];
+  if (!readEnv(GOOGLE_CALENDAR_CLIENT_ID_ENV)) {
+    problems.push(`${GOOGLE_CALENDAR_CLIENT_ID_ENV} is not set`);
+  }
+  if (!readEnv(GOOGLE_CALENDAR_CLIENT_SECRET_ENV)) {
+    problems.push(`${GOOGLE_CALENDAR_CLIENT_SECRET_ENV} is not set`);
+  }
+  const rawKey = readEnv(GOOGLE_TOKEN_ENCRYPTION_KEY_ENV);
+  if (!rawKey) {
+    problems.push(`${GOOGLE_TOKEN_ENCRYPTION_KEY_ENV} is not set`);
+  } else if (!decodeEncryptionKey(rawKey)) {
+    problems.push(`${GOOGLE_TOKEN_ENCRYPTION_KEY_ENV} must be base64 for 32 bytes`);
+  }
+  if (!getSupabasePublicConfig()) {
+    problems.push(`${SUPABASE_URL_ENV} / ${SUPABASE_ANON_KEY_ENV} are not set`);
+  }
+  const secretKeyProblem = describeSupabaseSecretKeyProblem();
+  if (secretKeyProblem) problems.push(secretKeyProblem);
+  return problems;
 }
 
 export function resolveRedirectUri(
