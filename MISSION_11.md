@@ -96,6 +96,14 @@ CI and the agent's mocked tests cannot exercise real Google or Supabase response
 - [ ] All five variables are set (`SUPABASE_SECRET_KEY` is the `sb_secret_...` key; `SUPABASE_SERVICE_ROLE_KEY` is removed). The card shows **Connect Google Calendar**, not "not configured".
 - [ ] If it does say "not configured", the server log line `[google-calendar/status] Not configured:` names the variable to fix.
 
+**0b. Magic-link sign-in on localhost (blocked acceptance before; fixed)**
+- [ ] Supabase → Authentication → URL Configuration lists `http://localhost:3000/auth/callback` (or `http://localhost:3000/**`). No dashboard change is needed for the fix itself.
+- [ ] Open `http://localhost:3000` (not `127.0.0.1`), choose **Email link**, send. Open the email link in the **same** Chrome profile → the address bar shows `http://localhost:3000/…` (not the production domain) and the app shows "Synced as …".
+- [ ] Stale-session case: while signed in, sign out on another device or revoke the session in Supabase → Authentication → Users → the user → Sessions (so the localhost cookie is stale), then request and open a new link on localhost → signs in.
+- [ ] Terminal shows no `PKCE code verifier not found` line and no raw `code=` values in the request log.
+- [ ] Production regression: magic-link sign-in on `https://ai-planner-taupe.vercel.app` still works after deploy.
+- [ ] If sign-in still fails, copy only the `[auth/callback] Auth failed:` line (it contains no secrets) into the PR. `code verifier cookie: missing` means the link opened on a different host or browser than the one that requested it.
+
 **1. Connect (user A)**
 - [ ] Sign in with a magic link → Connect → Google consent shows only the free/busy permission → back in the app, the banner says "Google Calendar connected."
 - [ ] Supabase → Table editor → `google_calendar_connections` has one row for A. `refresh_token_ciphertext` starts with `v1.` and isn't readable; `scope` contains `calendar.freebusy`.
@@ -142,4 +150,4 @@ CI and the agent's mocked tests cannot exercise real Google or Supabase response
 - **Future**: multiple calendars, cached availability, feeding busy time into Today's Plan.
 
 ## Deliverables
-Feature branch `feature/google-calendar-phase1` and Draft PR #1 for GPT review; Sam merges manually. CI (`.github/workflows/ci.yml`) runs lint, typecheck and build on every PR update.
+Feature branch `feature/google-calendar-phase1` and Draft PR #1 for GPT review; Sam merges manually. CI (`.github/workflows/ci.yml`) runs lint, typecheck, tests and build on every PR update.

@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { hasRecognizedAuthParams } from "@/lib/auth/parseAuthParams";
+import { AUTH_CALLBACK_PATH } from "@/lib/auth/redirect";
 import { getSupabasePublicConfig } from "@/lib/supabase/config";
 
 export async function updateSession(request: NextRequest) {
@@ -8,6 +9,13 @@ export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   if (!config) {
+    return response;
+  }
+
+  // The callback route establishes the session itself. Refreshing here first
+  // can sign out a stale session cookie, and auth-js's sign-out cleanup also
+  // deletes the PKCE code verifier the callback is about to exchange.
+  if (request.nextUrl.pathname === AUTH_CALLBACK_PATH) {
     return response;
   }
 
@@ -38,11 +46,11 @@ export async function updateSession(request: NextRequest) {
 
   if (
     hasRecognizedAuthParams(url) &&
-    url.pathname !== "/auth/callback" &&
+    url.pathname !== AUTH_CALLBACK_PATH &&
     !isGoogleCalendarRoute
   ) {
     const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = "/auth/callback";
+    redirectUrl.pathname = AUTH_CALLBACK_PATH;
     return NextResponse.redirect(redirectUrl);
   }
 

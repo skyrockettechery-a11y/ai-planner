@@ -85,6 +85,8 @@ This creates `public.google_calendar_connections` (RLS on, no policies, browser 
    - **Site URL:** `https://ai-planner-taupe.vercel.app` (or your Vercel URL)
    - **Redirect URLs:** add `https://ai-planner-taupe.vercel.app/auth/callback` and `http://localhost:3000/auth/callback`
 
+   The app requests exactly `<origin>/auth/callback` (no query string), so these exact entries match. If a redirect URL doesn't match, Supabase silently sends the link to the **Site URL** instead — for local testing that means production, and sign-in fails with "PKCE code verifier not found". A wildcard such as `http://localhost:3000/**` also works.
+
 **Google OAuth (not fully enabled):**
 
 1. Authentication → Providers → Google — configure Client ID and Secret from Google Cloud Console

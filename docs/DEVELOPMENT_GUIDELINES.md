@@ -50,10 +50,10 @@ Claude Cloud → Feature Branch → Draft PR → GPT Review → Sam manually mer
 1. Read the mission file (`MISSION_XX.md`) and [PROJECT_CONSTITUTION.md](../PROJECT_CONSTITUTION.md)
 2. Work on the **approved feature branch** for the mission (never on `main`)
 3. Implement only what the mission specifies
-4. Run `npm run lint`, `npm run typecheck` and `npm run build`
+4. Run `npm run lint`, `npm run typecheck`, `npm test` and `npm run build`
 5. Update mission file and docs as the mission requires
 6. Commit and push to the feature branch; open or update the mission's **Draft PR** into `main`
-7. CI (GitHub Actions) runs lint, typecheck and build on every PR update
+7. CI (GitHub Actions) runs lint, typecheck, tests and build on every PR update
 8. **GPT reviews** the Draft PR; address findings with new commits on the same branch
 9. **Sam manually merges** — agents stop once the Draft PR is updated for review
 
@@ -93,10 +93,11 @@ For each mission:
 ```bash
 npm run lint
 npm run typecheck
+npm test
 npm run build
 ```
 
-The same checks run automatically in GitHub Actions (`.github/workflows/ci.yml`) on every PR update; they need no secrets. Anything that could not be run or tested must be stated in the PR description.
+`npm test` runs `tests/**/*.test.ts` with Node's built-in test runner (via `tsx`, which understands the `@/` path alias). Keep tests small and dependency-free; stub `fetch` instead of calling real services. The same checks run automatically in GitHub Actions (`.github/workflows/ci.yml`) on every PR update; they need no secrets. Anything that could not be run or tested must be stated in the PR description.
 
 Manual testing on desktop and mobile viewport as relevant. Heavy test frameworks are not required for MVP.
 

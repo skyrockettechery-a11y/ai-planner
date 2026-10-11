@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSupabasePublicConfig } from "@/components/SupabaseConfigProvider";
 import { cleanAuthParamsFromUrl } from "@/lib/auth/cleanAuthUrl";
 import { completeAuthFromParsed } from "@/lib/auth/completeAuth";
@@ -13,6 +13,7 @@ import {
   hasRecognizedAuthParams,
   parseAuthParamsFromUrl,
 } from "@/lib/auth/parseAuthParams";
+import { runOncePerKey } from "@/lib/auth/runOnce";
 import { captureAuthUrlOnLanding } from "@/lib/auth/urlParams";
 import { createBrowserClientFromConfig } from "@/lib/supabase/client";
 
@@ -27,8 +28,10 @@ export function AuthSessionHandler({
 }) {
   const config = useSupabasePublicConfig();
   const [status, setStatus] = useState<"hidden" | "working" | "done">("hidden");
+  const onCompletingChangeRef = useRef(onCompletingChange);
 
   useEffect(() => {
+    onCompletingChangeRef.current = onCompletingChange;
     onCompletingChange?.(status === "working");
   }, [status, onCompletingChange]);
 
@@ -44,12 +47,8 @@ export function AuthSessionHandler({
       return;
     }
 
-    const supabase = createBrowserClientFromConfig(config);
-    let cancelled = false;
-
-    const run = async () => {
-      setStatus("working");
-
+    const completeFromUrl = async () => {
+      const supabase = createBrowserClientFromConfig(config);
       const url = new URL(window.location.href);
       const parsed = parseAuthParamsFromUrl(url);
       const result = await completeAuthFromParsed(supabase, parsed);
@@ -84,9 +83,23 @@ export function AuthSessionHandler({
       window.history.replaceState(null, "", failUrl.toString());
     };
 
+    let cancelled = false;
+
+    const run = async () => {
+      setStatus("working");
+      // Strict Mode re-runs this effect; a second run reuses the first attempt
+      // instead of exchanging the same single-use code again.
+      await runOncePerKey(initialUrl.href, completeFromUrl);
+    };
+
     void run().finally(() => {
       if (!cancelled) {
         setStatus("done");
+      } else {
+        // Unmounted mid-flight: PlannerApp swaps the header (and this
+        // component) for its loading screen while sign-in completes. Still
+        // release its gate, or the page stays on "Loading your tasks…".
+        onCompletingChangeRef.current?.(false);
       }
     });
 

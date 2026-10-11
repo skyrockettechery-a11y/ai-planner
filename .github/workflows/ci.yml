@@ -1,6 +1,6 @@
 name: CI
 
-# Lint, typecheck and build every pull request update. Uses no secrets:
+# Lint, typecheck, test and build every pull request update. Uses no secrets:
 # Supabase and Google Calendar settings are read at runtime, so the build
 # succeeds without them (the app reports "not configured" instead).
 on:
@@ -40,6 +40,9 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: Test
+        run: npm test
 
       - name: Build
         run: npm run build

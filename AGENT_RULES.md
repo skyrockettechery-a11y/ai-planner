@@ -29,7 +29,7 @@ Claude Cloud → Feature Branch → Draft PR → GPT Review → Sam manually mer
 |------|-----|------|
 | Implement | Claude Cloud | Works only within the approved mission scope |
 | Feature branch | Claude Cloud | Commits and pushes to the approved feature branch only |
-| Draft PR | Claude Cloud | Opens or updates a **Draft** PR into `main`; CI runs lint, typecheck, build |
+| Draft PR | Claude Cloud | Opens or updates a **Draft** PR into `main`; CI runs lint, typecheck, tests, build |
 | Review | GPT | Reviews the Draft PR; Claude pushes fixes to the same branch |
 | Merge | Sam | Marks the PR ready and merges manually |
 
@@ -127,6 +127,7 @@ Avoid deeply nested folders unless necessary.
 Agents should:
 - Run lint checks (`npm run lint`)
 - Ensure no TypeScript errors (`npm run typecheck`)
+- Run the automated tests (`npm test`)
 - Ensure build passes (`npm run build`)
 - Report anything that could not be run or tested in the PR description
 

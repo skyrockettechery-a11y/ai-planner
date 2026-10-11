@@ -8,6 +8,23 @@ Documented problems, causes, and workarounds encountered during development and 
 
 ## Authentication
 
+### "PKCE code verifier not found in storage" (magic link) — fixed in Mission 11
+
+**Symptom:** Clicking the email link returns to the app signed out; the terminal shows `[auth] exchangeCodeForSession failed: PKCE code verifier not found in storage.`
+
+**How the flow works:** `signInWithOtp` in the browser stores a one-time *code verifier* in the `sb-<ref>-auth-token-code-verifier` cookie. The email link comes back to `/auth/callback?code=…`, which must receive that cookie to exchange the code. The error means the callback request didn't carry it.
+
+**Causes found (all reproduced locally and fixed):**
+1. **Redirect URL fell back to the Site URL.** The app requested `…/auth/callback?next=/`; Supabase matches redirect URLs against its allow-list as globs over the full URL, so an exact entry `http://localhost:3000/auth/callback` didn't match and the link went to the Site URL (production), where this browser's verifier cookie doesn't exist. *Fix:* the app now requests exactly `<origin>/auth/callback`.
+2. **The middleware signed out a stale session on the callback request.** With an old/revoked session cookie in the browser, `getUser()` in the middleware triggered auth-js's sign-out cleanup, which also deletes the PKCE verifier — before the callback ran. *Fix:* the middleware skips session refresh on `/auth/callback`.
+3. **The same code was exchanged more than once in the browser.** When a code reached a page, both the Supabase client (`detectSessionInUrl`) and `AuthSessionHandler` (twice under React Strict Mode) exchanged it; all but the first failed with this message. *Fix:* `detectSessionInUrl: false` and a run-once guard. A related pre-existing bug (page stuck on "Loading your tasks…" after client-side sign-in) was fixed too.
+
+**If it still happens:** read the `[auth/callback] Auth failed:` line. `code verifier cookie: missing` means the link opened somewhere without this browser's cookie — check the address bar shows the **same host** you signed in from (`localhost` ≠ `127.0.0.1` ≠ production), and the same browser profile. `present` means a different cause (e.g. expired or reused link — request a new one).
+
+**Alternative (needs approval):** a token-hash email template (`verifyOtp`) needs no verifier cookie at all — see [DECISIONS.md](./DECISIONS.md).
+
+---
+
 ### Email OTP rate limit
 
 **Symptom:** After many login attempts in a short period, Supabase returns a rate-limit error; magic link emails stop arriving.

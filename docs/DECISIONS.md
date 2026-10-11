@@ -332,6 +332,18 @@ Each entry follows the same structure:
 
 ---
 
+### Keep the PKCE magic link; token-hash flow documented as the fallback
+
+**Decision:** Fix the PKCE magic-link flow (exact redirect URL, no session refresh on `/auth/callback`, single client-side handler) rather than switching the email template to a token-hash link.
+
+**Context:** Local acceptance testing hit "PKCE code verifier not found in storage". PKCE links only work in the browser (and on the host) that requested them, because the verifier is a cookie there.
+
+**Alternative considered:** Supabase's token-hash link (`verifyOtp`) doesn't need a verifier, so it also works when the link opens in a different browser or an email app's in-app browser. `/auth/callback` **already** handles `?token_hash=…&type=…`, so switching needs only an email-template change in the Supabase dashboard, e.g. `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email` (valid now that `RedirectTo` carries no query string). Not done: it changes production email templates and needs owner approval.
+
+**Trade-offs:** PKCE keeps the cross-device protection (a leaked link can't be used in another browser); the token-hash flow is more forgiving for users who open links on another device.
+
+---
+
 ## Process
 
 ### Mission-based development via feature branch and Draft PR
