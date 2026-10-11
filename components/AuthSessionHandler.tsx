@@ -13,7 +13,7 @@ import {
   hasRecognizedAuthParams,
   parseAuthParamsFromUrl,
 } from "@/lib/auth/parseAuthParams";
-import { runOncePerKey } from "@/lib/auth/runOnce";
+import { completeAuthUrlOncePerPageLoad } from "@/lib/auth/runOnce";
 import { captureAuthUrlOnLanding } from "@/lib/auth/urlParams";
 import { createBrowserClientFromConfig } from "@/lib/supabase/client";
 
@@ -89,7 +89,7 @@ export function AuthSessionHandler({
       setStatus("working");
       // Strict Mode re-runs this effect; a second run reuses the first attempt
       // instead of exchanging the same single-use code again.
-      await runOncePerKey(initialUrl.href, completeFromUrl);
+      await completeAuthUrlOncePerPageLoad(completeFromUrl);
     };
 
     void run().finally(() => {

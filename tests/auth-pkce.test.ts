@@ -17,7 +17,7 @@ import {
   supabaseAuthStorageKey,
 } from "@/lib/auth/authCookies";
 import { authCallbackUrl, safeNextPath } from "@/lib/auth/redirect";
-import { runOncePerKey } from "@/lib/auth/runOnce";
+import { completeAuthUrlOncePerPageLoad } from "@/lib/auth/runOnce";
 import { createBrowserClientFromConfig } from "@/lib/supabase/client";
 import { updateSession } from "@/lib/supabase/middleware";
 
@@ -234,20 +234,27 @@ describe("redirect helpers", () => {
   });
 });
 
-describe("runOncePerKey", () => {
-  it("runs a task once per key and shares its promise (Strict Mode double effects)", async () => {
+describe("completeAuthUrlOncePerPageLoad", () => {
+  it("completes auth params once per page load without keeping the URL", async () => {
+    // Keyless by design: nothing derived from the landing URL (which may hold
+    // a one-time code or bearer tokens) is stored for the page's lifetime.
+    assert.equal(completeAuthUrlOncePerPageLoad.length, 1, "takes only the task, no key");
+
+    const landingUrl = "http://localhost:3000/#access_token=fake-token&refresh_token=fake-refresh";
     let runs = 0;
     const task = async () => {
       runs += 1;
-      return "done";
+      void landingUrl; // the task may close over the URL while it runs
     };
-    const first = runOncePerKey("test-key-a", task);
-    const second = runOncePerKey("test-key-a", task);
+    // Strict Mode: the effect runs twice; both share one attempt.
+    const first = completeAuthUrlOncePerPageLoad(task);
+    const second = completeAuthUrlOncePerPageLoad(task);
     assert.equal(first, second);
-    assert.equal(await second, "done");
+    assert.equal(await second, undefined, "the shared attempt resolves to nothing");
     assert.equal(runs, 1);
-    await runOncePerKey("test-key-b", task);
-    assert.equal(runs, 2);
+
+    await completeAuthUrlOncePerPageLoad(task);
+    assert.equal(runs, 1, "never re-runs within the same page load");
   });
 });
 
@@ -353,7 +360,34 @@ describe("middleware (updateSession)", () => {
     assert.match(response.headers.get("set-cookie") ?? "", new RegExp(`${STORAGE_KEY}=;`));
   });
 
-  it("still forwards ?code= on other paths to /auth/callback (unchanged)", async () => {
+  it("forwards ?code= to /auth/callback before touching a stale session", async () => {
+    // A link landing on `/?code=` (e.g. Supabase falling back to the Site URL)
+    // while the browser holds a revoked session: the verifier must survive
+    // the hop to the callback, and the callback must then sign in.
+    const jar = new CookieJar();
+    await requestMagicLink(jar);
+    addStaleSession(jar, { expired: false });
+    auth.calls = [];
+
+    const request = new NextRequest("http://localhost:3000/?code=good-code", {
+      headers: { cookie: jar.header() },
+    });
+    const response = await updateSession(request);
+
+    assert.deepEqual(auth.calls, [], "no getUser/refresh before the redirect");
+    assert.equal(response.headers.get("set-cookie"), null, "no cookies changed");
+    assert.ok(request.cookies.get(VERIFIER)?.value, "verifier still on the request");
+    const location = new URL(response.headers.get("location") ?? "");
+    assert.equal(location.pathname, "/auth/callback");
+    assert.equal(location.searchParams.get("code"), "good-code");
+
+    const callback = new NextRequest(location, { headers: { cookie: jar.header() } });
+    assert.equal((await updateSession(callback)).headers.get("set-cookie"), null);
+    const { error } = await serverClient(jar).auth.exchangeCodeForSession("good-code");
+    assert.equal(error, null, "callback exchange succeeds with the verifier");
+  });
+
+  it("forwards ?code= without a session too (unchanged)", async () => {
     const request = new NextRequest("http://localhost:3000/?code=good-code");
     const response = await updateSession(request);
     const location = new URL(response.headers.get("location") ?? "");

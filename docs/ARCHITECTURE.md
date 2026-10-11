@@ -96,7 +96,7 @@ useAuth → user state in PlannerApp
 
 - **Email magic link:** Primary working method in production
 - **Google OAuth:** Button wired in UI; provider configuration incomplete
-- **Middleware:** `middleware.ts` → `lib/supabase/middleware.ts` refreshes Supabase session cookies — except on `/auth/callback`, where refreshing a stale session would delete the PKCE code verifier before the exchange
+- **Middleware:** `middleware.ts` → `lib/supabase/middleware.ts` refreshes Supabase session cookies — except on `/auth/callback`, and only *after* forwarding any sign-in params (`?code=`, `token_hash`) on other pages to `/auth/callback`, because refreshing a stale session would delete the PKCE code verifier before the exchange
 - **PKCE:** the browser stores a code verifier cookie at sign-in; `/auth/callback` exchanges `?code=` server-side using it. Redirect URLs are exactly `<origin>/auth/callback` so they match the Supabase allow-list. `AuthSessionHandler` is the only client-side handler of auth params in the URL (`detectSessionInUrl: false`), once per page load
 - **URL cleanup:** Auth error/success params cleaned from URL (`lib/auth/cleanAuthUrl.ts`, `AuthSessionHandler`)
 
