@@ -16,6 +16,7 @@ import {
   isSessionCookieName,
   supabaseAuthStorageKey,
 } from "@/lib/auth/authCookies";
+import { hasRecognizedAuthParams, parseAuthParamsFromUrl } from "@/lib/auth/parseAuthParams";
 import { authCallbackUrl, safeNextPath } from "@/lib/auth/redirect";
 import { completeAuthUrlOncePerPageLoad } from "@/lib/auth/runOnce";
 import { createBrowserClientFromConfig } from "@/lib/supabase/client";
@@ -256,6 +257,47 @@ describe("completeAuthUrlOncePerPageLoad", () => {
     await completeAuthUrlOncePerPageLoad(task);
     assert.equal(runs, 1, "never re-runs within the same page load");
   });
+
+  it("ignores the second Strict Mode effect run's own closure", async () => {
+    // Each effect run builds a fresh `completeFromUrl`; only the first runs.
+    // (Module state persists across tests in this file, so the guard is
+    // already spent here — exactly as after the first mount on a real page.)
+    let secondRan = false;
+    await completeAuthUrlOncePerPageLoad(async () => {
+      secondRan = true;
+    });
+    assert.equal(secondRan, false);
+  });
+});
+
+describe("auth param recognition", () => {
+  it("recognizes every supported sign-in shape, in query or hash", () => {
+    const base = "http://localhost:3000/";
+    const cases: [string, string][] = [
+      ["?code=fake-code", "code"],
+      ["#code=fake-code", "code"],
+      ["?token_hash=fake-hash&type=magiclink", "otp"],
+      ["#token_hash=fake-hash&type=email", "otp"],
+      ["#access_token=fake-access&refresh_token=fake-refresh", "session"],
+    ];
+    for (const [suffix, kind] of cases) {
+      const url = new URL(base + suffix);
+      assert.equal(parseAuthParamsFromUrl(url).kind, kind, suffix);
+      assert.equal(hasRecognizedAuthParams(url), true, suffix);
+    }
+  });
+
+  it("does not treat error or feedback URLs as sign-in params (no redirect loop)", () => {
+    for (const suffix of [
+      "?auth_error=exchange_failed&auth_debug_path=%2F&auth_debug_q=code",
+      "?error=access_denied&error_code=otp_expired",
+      "#error=access_denied",
+      "?next=%2F",
+      "",
+    ]) {
+      assert.equal(hasRecognizedAuthParams(new URL(`http://localhost:3000/${suffix}`)), false, suffix);
+    }
+  });
 });
 
 describe("browser client", () => {
@@ -297,6 +339,18 @@ describe("callback code exchange", () => {
     const { error } = await serverClient(jar).auth.exchangeCodeForSession("good-code");
     assert.match(error?.message ?? "", /PKCE code verifier not found/);
     assert.ok(!auth.calls.includes("POST /auth/v1/token?pkce"), "exchange never reached Supabase");
+  });
+
+  it("signs in cleanly with no prior session", async () => {
+    const jar = new CookieJar();
+    await requestMagicLink(jar);
+
+    const { data, error } = await serverClient(jar).auth.exchangeCodeForSession("good-code");
+
+    assert.equal(error, null);
+    assert.equal(data.session?.access_token, freshSession().access_token);
+    assert.equal(jar.has(VERIFIER), false, "verifier consumed");
+    assert.match(storedSessionText(jar), /new-session|new-refresh/);
   });
 
   for (const expired of [false, true]) {
@@ -360,31 +414,83 @@ describe("middleware (updateSession)", () => {
     assert.match(response.headers.get("set-cookie") ?? "", new RegExp(`${STORAGE_KEY}=;`));
   });
 
-  it("forwards ?code= to /auth/callback before touching a stale session", async () => {
-    // A link landing on `/?code=` (e.g. Supabase falling back to the Site URL)
-    // while the browser holds a revoked session: the verifier must survive
-    // the hop to the callback, and the callback must then sign in.
+  it("reproduces the bug at the middleware: a session refresh drops a pending verifier", async () => {
+    // What `/?code=` used to go through before its redirect: the normal
+    // refresh path. With a revoked session it clears the verifier too.
     const jar = new CookieJar();
     await requestMagicLink(jar);
     addStaleSession(jar, { expired: false });
-    auth.calls = [];
 
-    const request = new NextRequest("http://localhost:3000/?code=good-code", {
+    const request = new NextRequest("http://localhost:3000/", {
       headers: { cookie: jar.header() },
     });
     const response = await updateSession(request);
 
-    assert.deepEqual(auth.calls, [], "no getUser/refresh before the redirect");
-    assert.equal(response.headers.get("set-cookie"), null, "no cookies changed");
-    assert.ok(request.cookies.get(VERIFIER)?.value, "verifier still on the request");
+    assert.ok(auth.calls.includes("GET /auth/v1/user"));
+    assert.match(response.headers.get("set-cookie") ?? "", new RegExp(`${VERIFIER}=;`));
+  });
+
+  for (const expired of [false, true]) {
+    it(`forwards ?code= to /auth/callback before touching a stale ${expired ? "expired" : "revoked"} session`, async () => {
+      // A link landing on `/?code=` (e.g. Supabase falling back to the Site
+      // URL) while the browser holds a stale session: the verifier must
+      // survive the hop to the callback, and the callback must then sign in.
+      const jar = new CookieJar();
+      await requestMagicLink(jar);
+      addStaleSession(jar, { expired });
+      auth.calls = [];
+
+      const request = new NextRequest("http://localhost:3000/?code=good-code", {
+        headers: { cookie: jar.header() },
+      });
+      const response = await updateSession(request);
+
+      assert.deepEqual(auth.calls, [], "no getUser/refresh before the redirect");
+      assert.equal(response.headers.get("set-cookie"), null, "no cookies changed");
+      assert.ok(request.cookies.get(VERIFIER)?.value, "verifier still on the request");
+      const location = new URL(response.headers.get("location") ?? "");
+      assert.equal(location.pathname, "/auth/callback");
+      assert.equal(location.searchParams.get("code"), "good-code");
+
+      const callback = new NextRequest(location, { headers: { cookie: jar.header() } });
+      const callbackResponse = await updateSession(callback);
+      assert.equal(callbackResponse.headers.get("set-cookie"), null);
+      assert.equal(callbackResponse.headers.get("location"), null, "no redirect loop");
+      assert.deepEqual(auth.calls, [], "still no refresh on the callback");
+      const { error } = await serverClient(jar).auth.exchangeCodeForSession("good-code");
+      assert.equal(error, null, "callback exchange succeeds with the verifier");
+    });
+  }
+
+  it("forwards ?token_hash= on other pages before touching a stale session", async () => {
+    const jar = new CookieJar();
+    addStaleSession(jar, { expired: false });
+
+    const request = new NextRequest(
+      "http://localhost:3000/?token_hash=fake-hash&type=magiclink",
+      { headers: { cookie: jar.header() } },
+    );
+    const response = await updateSession(request);
+
+    assert.deepEqual(auth.calls, []);
     const location = new URL(response.headers.get("location") ?? "");
     assert.equal(location.pathname, "/auth/callback");
-    assert.equal(location.searchParams.get("code"), "good-code");
+    assert.equal(location.searchParams.get("token_hash"), "fake-hash");
+  });
 
-    const callback = new NextRequest(location, { headers: { cookie: jar.header() } });
-    assert.equal((await updateSession(callback)).headers.get("set-cookie"), null);
-    const { error } = await serverClient(jar).auth.exchangeCodeForSession("good-code");
-    assert.equal(error, null, "callback exchange succeeds with the verifier");
+  it("does not forward error or feedback URLs, and still refreshes there", async () => {
+    // The callback's own error redirect (`/?auth_error=...`) must not bounce
+    // back to the callback.
+    for (const path of ["/?auth_error=exchange_failed", "/?error=access_denied"]) {
+      auth.calls = [];
+      const jar = new CookieJar();
+      addStaleSession(jar, { expired: false });
+      const response = await updateSession(
+        new NextRequest(`http://localhost:3000${path}`, { headers: { cookie: jar.header() } }),
+      );
+      assert.equal(response.headers.get("location"), null, path);
+      assert.ok(auth.calls.includes("GET /auth/v1/user"), path);
+    }
   });
 
   it("forwards ?code= without a session too (unchanged)", async () => {
@@ -401,5 +507,21 @@ describe("middleware (updateSession)", () => {
     );
     const response = await updateSession(request);
     assert.equal(response.headers.get("location"), null);
+  });
+
+  it("does not forward Google's ?code= to the Supabase callback, even with a session", async () => {
+    const jar = new CookieJar();
+    addStaleSession(jar, { expired: false });
+    jar.set("gcal_oauth_state", "fake-state");
+
+    const request = new NextRequest(
+      "http://localhost:3000/api/google-calendar/callback?code=fake-google-code&state=fake-state",
+      { headers: { cookie: jar.header() } },
+    );
+    const response = await updateSession(request);
+
+    assert.equal(response.headers.get("location"), null, "reaches its own route handler");
+    assert.ok(auth.calls.includes("GET /auth/v1/user"), "session still validated (unchanged)");
+    assert.doesNotMatch(response.headers.get("set-cookie") ?? "", /gcal_oauth_state/);
   });
 });
