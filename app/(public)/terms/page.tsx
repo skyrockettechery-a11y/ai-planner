@@ -5,9 +5,7 @@ import {
   ContactEmail,
   DocumentHeader,
   DocumentSection,
-  OwnerPending,
 } from "@/components/PublicPage";
-import { LEGAL_OPERATOR_NAME } from "@/lib/legal";
 
 export const metadata: Metadata = {
   title: "Terms of Service · AI Planner",
@@ -28,14 +26,20 @@ export default function TermsPage() {
 
       <DocumentSection id="service" title="1. The service">
         <p>
-          AI Planner is a task-planning web application operated by{" "}
-          {LEGAL_OPERATOR_NAME ?? (
-            <OwnerPending>operator name to be provided by the owner</OwnerPending>
-          )}{" "}
-          (“we”, “us”). It lets you capture tasks, prioritize them using the
+          AI Planner is a task-planning web application. In these terms, “AI
+          Planner”, “we” and “us” refer to the people who run this
+          application; AI Planner is the name of the application, not a
+          registered company.
+        </p>
+        <p>
+          AI Planner lets you capture tasks, prioritize them using the
           Eisenhower Matrix, plan your day, and optionally sync tasks across
-          devices by signing in. AI Planner is a small application offered for
-          limited use and is currently provided free of charge.
+          devices by signing in. It is a small application offered for limited
+          use.
+        </p>
+        <p>
+          AI Planner is currently free of charge. This may change in the
+          future; if it does, we will update these terms first.
         </p>
       </DocumentSection>
 
@@ -49,7 +53,7 @@ export default function TermsPage() {
 
       <DocumentSection id="responsibilities" title="3. Your responsibilities">
         <BulletList>
-          <li>Use AI Planner lawfully and only for your own planning.</li>
+          <li>Use AI Planner lawfully.</li>
           <li>
             Do not try to access other users’ data, interfere with the
             service, or bypass its security.
@@ -121,9 +125,14 @@ export default function TermsPage() {
       <DocumentSection id="ending" title="7. Ending your use">
         <p>
           You can stop using AI Planner at any time and disconnect Google
-          Calendar whenever you like. To ask for your account and data to be
-          deleted, contact us. We may suspend access for anyone who misuses
-          the service or breaks these terms.
+          Calendar whenever you like. To ask for your account and its data to
+          be deleted, email <ContactEmail />. Deletion requests are handled
+          manually after we verify your identity, as described in the{" "}
+          <Link href="/privacy#retention" className={linkClass}>
+            Privacy Policy
+          </Link>
+          . We may suspend access for anyone who misuses the service, tries to
+          access it without authorization, or breaks these terms.
         </p>
       </DocumentSection>
 

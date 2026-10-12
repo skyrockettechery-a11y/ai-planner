@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { QUADRANT_META, QUADRANTS } from "@/lib/quadrants";
 
 export const metadata: Metadata = {
   title: "About AI Planner",
@@ -14,7 +15,8 @@ const FEATURES = [
   },
   {
     title: "Prioritize with the Eisenhower Matrix",
-    body: "Tasks are suggested into one of four quadrants — Important & Urgent, Important, Not Urgent, Not Important, Urgent, and Not Important, Not Urgent — using simple keyword rules. You can always move a task yourself.",
+    body: "Each task is suggested into one of the four quadrants below using simple keyword rules. You can always move a task yourself.",
+    quadrants: true,
   },
   {
     title: "Plan and track your day",
@@ -78,6 +80,18 @@ export default function AboutPage() {
             >
               <h3 className="text-base font-semibold text-zinc-900">{feature.title}</h3>
               <p className="mt-2 text-sm leading-6 text-zinc-600">{feature.body}</p>
+              {"quadrants" in feature && (
+                <ol className="mt-3 grid gap-1.5 text-sm text-zinc-700">
+                  {QUADRANTS.map((quadrant) => (
+                    <li key={quadrant} className="rounded-md bg-zinc-50 px-2.5 py-1.5">
+                      <span className="font-medium text-zinc-900">
+                        {QUADRANT_META[quadrant].label}
+                      </span>{" "}
+                      — {QUADRANT_META[quadrant].shortLabel}
+                    </li>
+                  ))}
+                </ol>
+              )}
             </li>
           ))}
         </ul>

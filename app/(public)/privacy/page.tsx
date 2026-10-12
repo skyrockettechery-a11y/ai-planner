@@ -6,13 +6,11 @@ import {
   DocumentHeader,
   DocumentSection,
   ExternalLink,
-  OwnerPending,
 } from "@/components/PublicPage";
 import {
   GOOGLE_ACCOUNT_PERMISSIONS_URL,
   GOOGLE_API_USER_DATA_POLICY_URL,
   GOOGLE_CALENDAR_FREEBUSY_SCOPE_URL,
-  LEGAL_OPERATOR_NAME,
 } from "@/lib/legal";
 
 export const metadata: Metadata = {
@@ -28,7 +26,7 @@ const CONTENTS = [
   { id: "disconnect", label: "Disconnecting Google Calendar" },
   { id: "providers", label: "Service providers" },
   { id: "sharing", label: "Sharing" },
-  { id: "retention", label: "Retention and deletion" },
+  { id: "retention", label: "Retention and account deletion" },
   { id: "security", label: "Security" },
   { id: "choices", label: "Your choices" },
   { id: "contact", label: "Contact" },
@@ -60,13 +58,15 @@ export default function PrivacyPage() {
 
       <DocumentSection id="who" title="Who we are">
         <p>
-          AI Planner (“AI Planner”, “we”, “us”) is a small, independently
-          operated task-planning web application available at
-          ai-planner-taupe.vercel.app. It is operated by{" "}
-          {LEGAL_OPERATOR_NAME ?? (
-            <OwnerPending>operator name to be provided by the owner</OwnerPending>
-          )}
-          . You can reach us about privacy at <ContactEmail />.
+          AI Planner is a small, independently run task-planning web
+          application available at ai-planner-taupe.vercel.app. In this policy,
+          “AI Planner”, “we” and “us” refer to the people who run this
+          application. AI Planner is the name of the application, not a
+          registered company.
+        </p>
+        <p>
+          You can contact us about privacy, support or account deletion at{" "}
+          <ContactEmail />.
         </p>
       </DocumentSection>
 
@@ -123,8 +123,20 @@ export default function PrivacyPage() {
           Like most websites, our hosting and database providers process
           standard technical information when your browser makes a request,
           such as your IP address, browser type, the page or address requested,
-          and the time of the request. AI Planner does not use analytics,
-          advertising or third-party tracking tools.
+          and the time of the request. They may also keep operational logs and
+          metrics to run their platforms.
+        </p>
+        <p>
+          AI Planner’s code does not include analytics, advertising or
+          third-party tracking scripts, and the only cookies AI Planner sets
+          are the ones needed for sign-in and for connecting Google Calendar.
+        </p>
+
+        <h3 className="font-semibold text-zinc-900">Messages you send us</h3>
+        <p>
+          If you email us, we receive your email address and whatever you
+          include in your message, and use them to reply and to handle your
+          request.
         </p>
       </DocumentSection>
 
@@ -242,12 +254,15 @@ export default function PrivacyPage() {
           <ExternalLink href={GOOGLE_API_USER_DATA_POLICY_URL}>
             Google API Services User Data Policy
           </ExternalLink>
-          , including the Limited Use requirements. Google user data is used
-          only to provide the availability feature described above. It is not
-          sold, not used for advertising, not used to train AI or machine
-          learning models, and not read by people except with your consent,
-          for security purposes, or where required by law.
+          , including the Limited Use requirements. In particular, Google
+          Calendar data:
         </p>
+        <BulletList>
+          <li>is used only to show you your availability, as described above;</li>
+          <li>is not sold;</li>
+          <li>is not used for advertising; and</li>
+          <li>is not used to train artificial intelligence or machine learning models.</li>
+        </BulletList>
       </DocumentSection>
 
       <DocumentSection id="disconnect" title="4. Disconnecting Google Calendar">
@@ -291,8 +306,9 @@ export default function PrivacyPage() {
           </li>
           <li>
             <strong className="font-semibold text-zinc-900">Google</strong> —
-            provides Google Sign-In (if you use it) and the Google Calendar
-            free/busy service (if you connect it).
+            provides Google Sign-In (if you use it), the Google Calendar
+            free/busy service (if you connect it), and the Gmail account we use
+            to receive and answer support email.
           </li>
         </BulletList>
         <p>
@@ -303,13 +319,14 @@ export default function PrivacyPage() {
 
       <DocumentSection id="sharing" title="6. Sharing">
         <p>
-          We do not sell your information and do not share it for advertising.
-          We share information only with the service providers listed above as
-          needed to run AI Planner, or where required by law.
+          We do not sell personal user data and do not use it for advertising.
+          Information is processed by the service providers listed above so
+          that AI Planner can operate. We may also disclose information where
+          the law requires it.
         </p>
       </DocumentSection>
 
-      <DocumentSection id="retention" title="7. Retention and deletion">
+      <DocumentSection id="retention" title="7. Retention and account deletion">
         <BulletList>
           <li>
             Tasks and preferences remain in our database until you delete them.
@@ -326,11 +343,53 @@ export default function PrivacyPage() {
             revoke access at Google, or Google reports that access has expired
             or been revoked.
           </li>
+        </BulletList>
+
+        <h3 className="font-semibold text-zinc-900">Requesting account deletion</h3>
+        <p>
+          AI Planner does not yet offer account deletion inside the app.
+          Deletion requests are handled manually:
+        </p>
+        <ol className="list-decimal space-y-1.5 pl-5 marker:text-zinc-400">
           <li>
-            AI Planner does not currently offer in-app account deletion. To ask
-            for your account and its associated data to be deleted, contact us
-            at <ContactEmail />.
+            Email <ContactEmail /> and ask for your account to be deleted.
+            Sending the request from the email address you sign in with helps
+            us confirm it is you.
           </li>
+          <li>
+            We verify that the request comes from the account holder before
+            deleting anything, and may ask you to confirm by email.
+          </li>
+          <li>
+            We then delete your AI Planner account. This removes the tasks,
+            planning preferences and any Google Calendar connection stored
+            with it in our database.
+          </li>
+          <li>We reply to let you know once the deletion has been carried out.</li>
+        </ol>
+        <p>Please note:</p>
+        <BulletList>
+          <li>
+            Requests are processed by hand, so they are not immediate. We do not
+            promise a fixed response time.
+          </li>
+          <li>
+            Deleting the account does not by itself revoke AI Planner’s access
+            at Google. Disconnect Google Calendar first, or remove AI Planner at{" "}
+            <ExternalLink href={GOOGLE_ACCOUNT_PERMISSIONS_URL}>
+              myaccount.google.com/permissions
+            </ExternalLink>
+            .
+          </li>
+          <li>
+            We cannot remove the copy stored in your browser. Clear the site’s
+            data in each browser you used.
+          </li>
+          <li>
+            Our service providers may keep backups and logs for a limited time
+            under their own retention practices, which we do not control.
+          </li>
+          <li>We may keep our email correspondence about your request.</li>
         </BulletList>
       </DocumentSection>
 
@@ -364,10 +423,10 @@ export default function PrivacyPage() {
       <DocumentSection id="changes" title="11. Changes to this policy">
         <p>
           We may update this policy as AI Planner changes. We will post the
-          updated policy on this page and update the effective date. If we
-          change how AI Planner uses Google user data, we will update this
-          policy before the change takes effect and ask for your consent again
-          where required.
+          updated policy on this page and update the effective date. Before
+          using information, including Google user data, for a new purpose, we
+          will assess what the change requires, update this policy, and ask
+          for your consent where required.
         </p>
         <p>
           See also the{" "}

@@ -73,9 +73,6 @@ export function ExternalLink({ href, children }: { href: string; children: React
 }
 
 export function ContactEmail() {
-  if (!LEGAL_CONTACT_EMAIL) {
-    return <OwnerPending>contact email to be provided by the owner</OwnerPending>;
-  }
   return (
     <a
       href={`mailto:${LEGAL_CONTACT_EMAIL}`}
