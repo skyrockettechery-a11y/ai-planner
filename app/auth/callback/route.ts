@@ -1,6 +1,12 @@
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import {
+  describeAuthCookies,
+  supabaseAuthStorageKey,
+} from "@/lib/auth/authCookies";
 import type { AuthErrorCode } from "@/lib/auth/errors";
 import { completeAuthFromParsed } from "@/lib/auth/completeAuth";
+import { safeNextPath } from "@/lib/auth/redirect";
 import {
   AUTH_DEBUG_HASH_PARAM,
   AUTH_DEBUG_PATH_PARAM,
@@ -34,10 +40,11 @@ function redirectWithError(
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const { searchParams, origin } = requestUrl;
-  const next = searchParams.get("next") ?? "/";
+  const next = safeNextPath(searchParams.get("next"));
   const paramNames = getAuthParamNames(requestUrl);
 
-  if (!getSupabasePublicConfig()) {
+  const config = getSupabasePublicConfig();
+  if (!config) {
     console.error("[auth/callback] Supabase is not configured");
     return redirectWithError(origin, "not_configured", next, paramNames);
   }
@@ -45,6 +52,7 @@ export async function GET(request: Request) {
   const parsed = parseAuthParamsFromUrl(requestUrl);
 
   try {
+    const cookieNames = (await cookies()).getAll().map((cookie) => cookie.name);
     const supabase = await createServerSupabaseClient();
     const result = await completeAuthFromParsed(supabase, parsed);
 
@@ -52,6 +60,11 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL(next, origin));
     }
 
+    const diagnostics = describeAuthCookies(
+      cookieNames,
+      supabaseAuthStorageKey(config.url),
+    );
+    // Presence flags and parameter names only — never cookie or code values.
     console.error(
       "[auth/callback] Auth failed:",
       result.errorCode,
@@ -59,6 +72,10 @@ export async function GET(request: Request) {
       paramNames.query.join(",") || "(none)",
       "hash keys:",
       paramNames.hash.join(",") || "(none)",
+      "code verifier cookie:",
+      diagnostics.hadCodeVerifierCookie ? "present" : "missing",
+      "existing session cookie:",
+      diagnostics.hadSessionCookie ? "present" : "none",
     );
     return redirectWithError(origin, result.errorCode, next, paramNames);
   } catch (error) {

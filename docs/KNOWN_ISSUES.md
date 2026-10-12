@@ -8,6 +8,23 @@ Documented problems, causes, and workarounds encountered during development and 
 
 ## Authentication
 
+### "PKCE code verifier not found in storage" (magic link) — fixed in Mission 11
+
+**Symptom:** Clicking the email link returns to the app signed out; the terminal shows `[auth] exchangeCodeForSession failed: PKCE code verifier not found in storage.`
+
+**How the flow works:** `signInWithOtp` in the browser stores a one-time *code verifier* in the `sb-<ref>-auth-token-code-verifier` cookie. The email link comes back to `/auth/callback?code=…`, which must receive that cookie to exchange the code. The error means the callback request didn't carry it.
+
+**Causes found (all reproduced locally and fixed):**
+1. **Redirect URL fell back to the Site URL.** The app requested `…/auth/callback?next=/`; Supabase matches redirect URLs against its allow-list as globs over the full URL, so an exact entry `http://localhost:3000/auth/callback` didn't match and the link went to the Site URL (production), where this browser's verifier cookie doesn't exist. This explains links that landed on production; a link that reaches `localhost…/auth/callback` and still fails points to cause 2 or 3. *Fix:* the app now requests exactly `<origin>/auth/callback`.
+2. **The middleware signed out a stale session on the way to the callback.** With an old/revoked session cookie in the browser, `getUser()` in the middleware triggered auth-js's sign-out cleanup, which also deletes the PKCE verifier — before the callback ran. This happened on `/auth/callback` itself and on any page a code landed on (e.g. `/?code=`) before being forwarded. *Fix:* the middleware skips session refresh on `/auth/callback` and forwards sign-in params to it *before* any session refresh.
+3. **The same code was exchanged more than once in the browser.** When a code reached a page, both the Supabase client (`detectSessionInUrl`) and `AuthSessionHandler` (twice under React Strict Mode) exchanged it; all but the first failed with this message. *Fix:* `detectSessionInUrl: false` and a once-per-page-load guard that stores no URL (codes/tokens aren't kept in memory). A related pre-existing bug (page stuck on "Loading your tasks…" after client-side sign-in) was fixed too.
+
+**If it still happens:** read the `[auth/callback] Auth failed:` line. `code verifier cookie: missing` means the link opened somewhere without this browser's cookie — check the address bar shows the **same host** you signed in from (`localhost` ≠ `127.0.0.1` ≠ production), and the same browser profile. `present` means a different cause (e.g. expired or reused link — request a new one).
+
+**Alternative (needs approval):** a token-hash email template (`verifyOtp`) needs no verifier cookie at all — see [DECISIONS.md](./DECISIONS.md).
+
+---
+
 ### Email OTP rate limit
 
 **Symptom:** After many login attempts in a short period, Supabase returns a rate-limit error; magic link emails stop arriving.
@@ -77,6 +94,24 @@ Documented problems, causes, and workarounds encountered during development and 
 4. Verify locally with `npx tsx scripts/diagnose-supabase.ts`
 
 **Prevention:** Always pair URL and anon key from one Supabase project; redeploy after env changes.
+
+---
+
+### Dev-only `npm audit` findings
+
+**Symptom:** `npm audit` (including dev dependencies) reports high-severity advisories in `brace-expansion`, `braces`/`micromatch`/`fast-glob`, `js-yaml`, `browserslist`, `@babel/core`.
+
+**Cause:** Transitive dependencies of ESLint, `eslint-config-next` and the TypeScript/Tailwind build tooling. They run only on developer machines and in CI against this repo's own code; none ship in the deployed app. `npm audit --omit=dev` reports **0** vulnerabilities (since Next.js 16.3.8, Mission 11).
+
+**Fix:** Not urgent. The `braces` chain's only suggested fix downgrades `eslint-config-next` to 14.x (breaking), so it waits for upstream. The others can be lifted with a non-forced `npm audit fix` in a separate dependency-maintenance change. Never use `npm audit fix --force`.
+
+### `middleware` file convention deprecated (Next.js 16)
+
+**Symptom:** `next build` warns: *The "middleware" file convention is deprecated. Please use "proxy" instead.*
+
+**Cause:** Next.js 16 renamed `middleware.ts` to `proxy.ts`. The existing middleware still works (session refresh, sign-in `?code=` redirect).
+
+**Fix:** Planned as a separate mission. Renaming touches Supabase Auth session handling, so it needs its own regression test of sign-in and sync.
 
 ---
 

@@ -33,6 +33,11 @@ const HASH_KEYS_TO_REMOVE = new Set([
   "type",
   "access_token",
   "refresh_token",
+  "expires_in",
+  "expires_at",
+  "token_type",
+  "provider_token",
+  "provider_refresh_token",
 ]);
 
 function hashSearchParams(hash: string): URLSearchParams {

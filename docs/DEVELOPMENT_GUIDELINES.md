@@ -10,7 +10,7 @@ How to work on AI Planner — for humans and AI agents.
 2. **Small complete milestones** — one mission at a time
 3. **Minimal diffs** — change only what the mission requires
 4. **Local-first UX** — app must stay fast without sign-in
-5. **Stop before git commit** — human reviews and commits unless explicitly asked
+5. **Feature branch → Draft PR** — agents push to the approved feature branch; only Sam merges
 
 ---
 
@@ -43,17 +43,25 @@ Avoid deep nesting. Prefer extending existing modules over new abstractions.
 
 ## Mission Workflow
 
+```
+Claude Cloud → Feature Branch → Draft PR → GPT Review → Sam manually merges
+```
+
 1. Read the mission file (`MISSION_XX.md`) and [PROJECT_CONSTITUTION.md](../PROJECT_CONSTITUTION.md)
-2. Implement only what the mission specifies
-3. Run `npm run lint` and `npm run build`
-4. Update mission file if needed; add docs when the mission requires it
-5. **Stop before git commit** — report deliverables to the human
+2. Work on the **approved feature branch** for the mission (never on `main`)
+3. Implement only what the mission specifies
+4. Run `npm run lint`, `npm run typecheck`, `npm test` and `npm run build`
+5. Update mission file and docs as the mission requires
+6. Commit and push to the feature branch; open or update the mission's **Draft PR** into `main`
+7. CI (GitHub Actions) runs lint, typecheck, tests and build on every PR update
+8. **GPT reviews** the Draft PR; address findings with new commits on the same branch
+9. **Sam manually merges** — agents stop once the Draft PR is updated for review
 
 ### Agent autonomy ([AGENT_RULES.md](../AGENT_RULES.md))
 
-Agents **may:** create/modify files, refactor, fix errors, run lint/build, improve types and UX consistency.
+Agents **may:** create/modify files, refactor, fix errors, run lint/typecheck/build, improve types and UX consistency, commit and push to the approved feature branch, and open/update its Draft PR.
 
-Agents **must stop before:** git commit, push, paid services, API keys, scope beyond current mission, major rewrites, deleting major features.
+Agents **must stop before:** merging any PR, pushing to `main`, pushing to unapproved branches, marking a Draft PR ready, paid services, adding API keys or real credentials, configuring Vercel secrets, scope beyond current mission, major rewrites, deleting major features.
 
 ---
 
@@ -84,8 +92,12 @@ For each mission:
 
 ```bash
 npm run lint
+npm run typecheck
+npm test
 npm run build
 ```
+
+`npm test` runs `tests/**/*.test.ts` with Node's built-in test runner (via `tsx`, which understands the `@/` path alias). Keep tests small and dependency-free; stub `fetch` instead of calling real services. The same checks run automatically in GitHub Actions (`.github/workflows/ci.yml`) on every PR update; they need no secrets. Anything that could not be run or tested must be stated in the PR description.
 
 Manual testing on desktop and mobile viewport as relevant. Heavy test frameworks are not required for MVP.
 
@@ -155,7 +167,9 @@ Prefer **principles over implementation details** in stable docs. Put volatile d
 ## What Not to Do
 
 - Hardcode Supabase URL or keys
-- Commit `.env.local` or secrets
+- Commit `.env.local` or secrets (real values live in Bitwarden; docs use placeholders only)
+- Merge PRs or push to `main` (Sam merges manually)
+- Import `lib/googleCalendar/*`, `lib/supabase/admin.ts` or `lib/supabase/server.ts` from client code (they use `server-only`; the build fails)
 - Add real OpenAI/LLM API without mission approval
 - Redesign the whole app in a layout mission
 - Auto-delete localStorage on login

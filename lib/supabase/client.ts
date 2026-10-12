@@ -3,7 +3,15 @@ import type { SupabasePublicConfig } from "@/lib/supabase/config";
 import { getSupabasePublicConfig } from "@/lib/supabase/config";
 
 export function createBrowserClientFromConfig(config: SupabasePublicConfig) {
-  return createBrowserClient(config.url, config.anonKey);
+  return createBrowserClient(config.url, config.anonKey, {
+    auth: {
+      // AuthSessionHandler is the single owner of auth params in the URL.
+      // With auto-detection on as well, both exchange the same PKCE code; the
+      // loser fails with "PKCE code verifier not found" and reports an error
+      // even though sign-in succeeded.
+      detectSessionInUrl: false,
+    },
+  });
 }
 
 export function createClient() {

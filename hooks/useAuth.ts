@@ -7,6 +7,7 @@ import {
   getAuthErrorMessage,
   mapSupabaseAuthErrorCode,
 } from "@/lib/auth/errors";
+import { authCallbackUrl } from "@/lib/auth/redirect";
 import { createBrowserClientFromConfig } from "@/lib/supabase/client";
 
 export function useAuth() {
@@ -65,10 +66,9 @@ export function useAuth() {
 
   const signInWithGoogle = useCallback(async () => {
     if (!supabase) return;
-    const redirectTo = `${window.location.origin}/auth/callback`;
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${redirectTo}?next=/` },
+      options: { redirectTo: authCallbackUrl(window.location.origin) },
     });
   }, [supabase]);
 
@@ -78,7 +78,7 @@ export function useAuth() {
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=/`,
+          emailRedirectTo: authCallbackUrl(window.location.origin),
         },
       });
       if (!error) return { error: null };

@@ -267,16 +267,94 @@ Each entry follows the same structure:
 
 ---
 
+## Integrations
+
+### Google Calendar as a read-only availability source (Mission 11)
+
+**Decision:** Phase 1 connects Google Calendar with only the `calendar.freebusy` scope and shows busy periods. Calendar events never become tasks; AI Planner remains the source of truth for planning.
+
+**Context:** The owner approved Google Calendar as a new milestone. The MVP constitution had excluded it; planning around real-world commitments is part of the North Star.
+
+**Reasoning:**
+- Free/busy is the smallest permission that answers "when am I available?" — no event titles or attendees reach AI Planner
+- Keeping tasks and calendar separate avoids two-way sync conflicts and duplicate data
+- A read-only first step is reversible and easy to reason about
+
+**Trade-offs:**
+- No event details, so the UI can only say "busy", not what the commitment is
+- Only the primary calendar is queried
+
+**Possible future evolution:** Feed busy time into Today's Plan; later time blocking or event write-back would need broader scopes and a dedicated mission.
+
+---
+
+### Separate server-side Google OAuth with encrypted, deny-all token storage
+
+**Decision:** Calendar authorization is its own OAuth flow (not Supabase sign-in). Refresh tokens are AES-256-GCM encrypted and stored in a table with RLS enabled, no policies and browser privileges revoked; only server routes read it via a Supabase Secret API key (`SUPABASE_SECRET_KEY`), scoped to the verified session user.
+
+**Context:** Supabase's Google sign-in does not give the app durable, server-held Calendar tokens, and the task required that refresh tokens never reach the browser or other users.
+
+**Reasoning:**
+- Deny-all RLS means even ciphertext is unreadable from the browser; no RPC surface to secure
+- Encryption adds defense in depth against DB dumps or future policy mistakes; user id as authenticated data prevents row swapping
+- PKCE + a sealed, user-bound, single-use state cookie protects the callback from CSRF and account mix-ups
+
+**Trade-offs:**
+- Introduces `SUPABASE_SECRET_KEY` and an encryption key as new server secrets
+- Rotating the encryption key disconnects everyone (they reconnect)
+
+**Alternatives avoided:** browser-stored tokens (exposed to JS); encrypted per-browser cookie (no cross-device connection); user-readable rows with column grants (fragile).
+
+---
+
+### Supabase Secret API key instead of the legacy service_role JWT
+
+**Decision:** The server admin client uses `SUPABASE_SECRET_KEY` (`sb_secret_...`). The legacy `SUPABASE_SERVICE_ROLE_KEY` is no longer read; a value without the `sb_secret_` prefix is treated as "not configured".
+
+**Context:** Supabase's new API keys replace the JWT-based `anon`/`service_role` keys. Secret keys can be rotated or revoked individually without rotating the project JWT secret, and Supabase rejects them when sent from a browser.
+
+**Reasoning:**
+- Independent rotation/revocation limits blast radius if the key leaks
+- Browser rejection is a second guard on top of `server-only` and the non-`NEXT_PUBLIC_` name
+- Prefix validation turns a pasted publishable key or legacy JWT into a clear config message instead of a confusing storage error
+
+**Trade-offs:** Existing environments must add `SUPABASE_SECRET_KEY` (no silent fallback to the old variable, so there is exactly one key to rotate).
+
+---
+
+### Classify Google failures; only authorization failures disconnect
+
+**Decision:** Google errors are classified as authorization, configuration, rate limit/quota, unavailable, or other. Only authorization failures delete the stored connection and ask the user to reconnect.
+
+**Context:** Google returns HTTP 403 both for a missing scope and for quota exhaustion or a disabled Calendar API. Treating every 401/403 as "reconnect" sent users into a loop that could not fix server-side problems.
+
+**Trade-offs:** Unknown 403 reasons are reported as a generic Google error rather than forcing a reconnect.
+
+---
+
+### Keep the PKCE magic link; token-hash flow documented as the fallback
+
+**Decision:** Fix the PKCE magic-link flow (exact redirect URL, no session refresh on `/auth/callback`, single client-side handler) rather than switching the email template to a token-hash link.
+
+**Context:** Local acceptance testing hit "PKCE code verifier not found in storage". PKCE links only work in the browser (and on the host) that requested them, because the verifier is a cookie there.
+
+**Alternative considered:** Supabase's token-hash link (`verifyOtp`) doesn't need a verifier, so it also works when the link opens in a different browser or an email app's in-app browser. `/auth/callback` **already** handles `?token_hash=…&type=…`, so switching needs only an email-template change in the Supabase dashboard, e.g. `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email` (valid now that `RedirectTo` carries no query string). Not done: it changes production email templates and needs owner approval.
+
+**Trade-offs:** PKCE keeps the cross-device protection (a leaked link can't be used in another browser); the token-hash flow is more forgiving for users who open links on another device.
+
+---
+
 ## Process
 
-### Mission-based development with stop-before-commit
+### Mission-based development via feature branch and Draft PR
 
-**Decision:** Work proceeds in numbered missions; agents stop before git commit unless human approves.
+**Decision:** Work proceeds in numbered missions. Workflow: Claude Cloud → feature branch → Draft PR → GPT review → Sam manually merges. Claude may commit and push to the approved feature branch but never merges or pushes to `main`. (Amended October 2026; previously agents stopped before git commit.)
 
 **Context:** Project doubles as training ground for highly automated programming (PROJECT_CONSTITUTION).
 
 **Reasoning:**
-- Human retains control over repo history and release timing
+- Human retains control over `main` and release timing (only Sam merges)
+- Draft PRs plus CI give reviewers (GPT, Sam) a verified, reviewable diff
 - Each mission has explicit scope, constraints, and validation
 - Prevents scope creep and unauthorized secret commits
 

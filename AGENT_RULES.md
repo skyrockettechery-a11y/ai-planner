@@ -19,6 +19,25 @@ The AI agent handles:
 
 ---
 
+# Approved Workflow
+
+```
+Claude Cloud → Feature Branch → Draft PR → GPT Review → Sam manually merges
+```
+
+| Step | Who | What |
+|------|-----|------|
+| Implement | Claude Cloud | Works only within the approved mission scope |
+| Feature branch | Claude Cloud | Commits and pushes to the approved feature branch only |
+| Draft PR | Claude Cloud | Opens or updates a **Draft** PR into `main`; CI runs lint, typecheck, tests, build |
+| Review | GPT | Reviews the Draft PR; Claude pushes fixes to the same branch |
+| Merge | Sam | Marks the PR ready and merges manually |
+
+Claude is **authorized** to commit and push to approved feature branches.
+Claude must **never** merge a pull request or push directly to `main`.
+
+---
+
 # Allowed Autonomous Actions
 
 AI agents MAY:
@@ -37,6 +56,8 @@ AI agents MAY:
 - Reorganize files within the approved architecture
 - Improve UX consistency
 - Add reasonable loading/empty states
+- Commit and push to the approved feature branch
+- Open or update a Draft PR for that branch (one PR per mission)
 
 ---
 
@@ -44,10 +65,13 @@ AI agents MAY:
 
 AI agents MUST STOP before:
 
-- Git commit
-- Pushing to GitHub
+- Merging any pull request (only Sam merges)
+- Pushing or committing directly to `main`, or rewriting its history
+- Pushing to any branch other than the approved feature branch
+- Marking a Draft PR ready for review, or opening an additional PR, unless asked
 - Installing paid services
-- Adding API keys/secrets
+- Adding API keys/secrets or real credentials to code, docs, PRs or GitHub
+- Configuring deployment secrets (e.g. Vercel environment variables)
 - Major architecture rewrites
 - Changing core tech stack
 - Database introduction
@@ -101,9 +125,13 @@ Avoid deeply nested folders unless necessary.
 # Testing Principle
 
 Agents should:
-- Run lint checks
-- Ensure build passes
-- Ensure no TypeScript errors
+- Run lint checks (`npm run lint`)
+- Ensure no TypeScript errors (`npm run typecheck`)
+- Run the automated tests (`npm test`)
+- Ensure build passes (`npm run build`)
+- Report anything that could not be run or tested in the PR description
+
+GitHub Actions CI (`.github/workflows/ci.yml`) runs the same checks on every PR update; a PR should be green before GPT review.
 
 Heavy testing frameworks are not required in MVP.
 
