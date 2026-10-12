@@ -38,8 +38,10 @@ export default function TermsPage() {
           use.
         </p>
         <p>
-          AI Planner is currently free of charge. This may change in the
-          future; if it does, we will update these terms first.
+          AI Planner is currently free of charge. If we introduce paid
+          features or pricing in the future, we will update these terms before
+          the change takes effect. Charges will not apply retroactively, and
+          you will not be charged unless you choose a paid option.
         </p>
       </DocumentSection>
 

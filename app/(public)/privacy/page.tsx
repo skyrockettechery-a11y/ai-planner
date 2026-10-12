@@ -136,7 +136,9 @@ export default function PrivacyPage() {
         <p>
           If you email us, we receive your email address and whatever you
           include in your message, and use them to reply and to handle your
-          request.
+          request. We may keep this correspondence where reasonably necessary
+          to manage support, privacy and deletion requests, subject to
+          applicable retention and deletion laws.
         </p>
       </DocumentSection>
 
@@ -260,8 +262,16 @@ export default function PrivacyPage() {
         <BulletList>
           <li>is used only to show you your availability, as described above;</li>
           <li>is not sold;</li>
-          <li>is not used for advertising; and</li>
-          <li>is not used to train artificial intelligence or machine learning models.</li>
+          <li>is not used for advertising;</li>
+          <li>is not used to train artificial intelligence or machine learning models; and</li>
+          <li>
+            is not read by people, except with your explicit agreement to view
+            specific data, where necessary for security purposes (such as
+            investigating a bug or abuse), to comply with applicable law, or
+            where the data has been aggregated and anonymized and is used only
+            for internal operations, in line with applicable privacy and other
+            legal requirements.
+          </li>
         </BulletList>
       </DocumentSection>
 
@@ -312,17 +322,18 @@ export default function PrivacyPage() {
           </li>
         </BulletList>
         <p>
-          These providers process information on our behalf to run the service
-          and handle it under their own terms and privacy policies.
+          These providers handle relevant information to supply the hosting,
+          sign-in, database, calendar and email services AI Planner uses, under
+          their own terms and privacy policies.
         </p>
       </DocumentSection>
 
       <DocumentSection id="sharing" title="6. Sharing">
         <p>
           We do not sell personal user data and do not use it for advertising.
-          Information is processed by the service providers listed above so
-          that AI Planner can operate. We may also disclose information where
-          the law requires it.
+          The service providers listed above handle information as needed to
+          supply the services AI Planner uses. We may also disclose information
+          where the law requires it.
         </p>
       </DocumentSection>
 
@@ -365,13 +376,14 @@ export default function PrivacyPage() {
             planning preferences and any Google Calendar connection stored
             with it in our database.
           </li>
-          <li>We reply to let you know once the deletion has been carried out.</li>
+          <li>When the deletion is complete, we send you a confirmation email.</li>
         </ol>
         <p>Please note:</p>
         <BulletList>
           <li>
-            Requests are processed by hand, so they are not immediate. We do not
-            promise a fixed response time.
+            Requests are processed by hand, so deletion is not immediate and
+            we do not guarantee a fixed turnaround time. Any response or
+            deletion deadlines that applicable law requires still apply.
           </li>
           <li>
             Deleting the account does not by itself revoke AI Planner’s access
@@ -386,10 +398,14 @@ export default function PrivacyPage() {
             data in each browser you used.
           </li>
           <li>
-            Our service providers may keep backups and logs for a limited time
-            under their own retention practices, which we do not control.
+            Our service providers may keep backups and logs under their own
+            retention practices, which we do not control.
           </li>
-          <li>We may keep our email correspondence about your request.</li>
+          <li>
+            We may keep correspondence about your request where reasonably
+            necessary to manage support, privacy and deletion requests, subject
+            to applicable retention and deletion laws.
+          </li>
         </BulletList>
       </DocumentSection>
 
