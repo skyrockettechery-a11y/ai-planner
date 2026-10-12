@@ -16,7 +16,7 @@ export const LEGAL_DOCS_DRAFT = false;
 export const LEGAL_CONTACT_EMAIL = "aiplanner.support@gmail.com";
 
 /** Effective date shown on Privacy and Terms: the actual publication date. */
-export const LEGAL_EFFECTIVE_DATE: string | null = "12 October 2026";
+export const LEGAL_EFFECTIVE_DATE: string | null = "11 October 2026";
 
 export const GOOGLE_CALENDAR_FREEBUSY_SCOPE_URL =
   "https://www.googleapis.com/auth/calendar.freebusy";
