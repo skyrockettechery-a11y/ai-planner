@@ -34,7 +34,10 @@ Owner-approved as Calendar Phase 2A (P2A), the next step after Mission 11. Calen
    - Regenerate re-plans start times from scratch; lengths the user chose are kept
    - Refresh availability re-checks the calendar without moving any block
 3. **Manual "Add to Google Calendar" links**
-   - Each block links to `https://calendar.google.com/calendar/render?action=TEMPLATE…` with title, UTC start/end and details (duration, task notes, "one-time copy, not synced" notice)
+   - Each block links to `https://calendar.google.com/calendar/render?action=TEMPLATE…` with the task title, UTC start/end and details (duration and a "one-time copy, not synced" notice)
+   - **Task notes are not included by default.** A section checkbox, "Include task notes in Google Calendar links", is off by default and not saved. It appears only when a block has notes. Everything in the link is part of its URL, so opening it sends that text to Google and keeps it in browser history, even if the event is never saved
+   - **The link is offered only for a conflict-free block.** A block that overlaps another block or a busy time, falls outside the window, or starts before now shows a disabled button with the reason ("Resolve the warning above…" / "Starts before now — move it later…")
+   - When no live calendar check succeeded, each link shows a caution ("Not checked against your calendar" / "Calendar check failed — this time may clash with events"), and a trust badge above the blocks shows the state
    - The user reviews and saves the event in Google's UI. AI Planner doesn't call any event API and can't tell whether the event was saved
 
 ### Out of scope (not implemented)
@@ -50,11 +53,18 @@ Owner-approved as Calendar Phase 2A (P2A), the next step after Mission 11. Calen
 ### Availability states
 A failed calendar check never counts as an empty calendar.
 
-| State | When | UI |
-|-------|------|----|
-| `live` | Busy route returned busy periods | Caption: primary calendar only, open time isn't a guarantee of being free |
-| `not-connected` | `not_connected` (404) or `not_configured` (503) | Calm note: the schedule doesn't check the calendar |
-| `unavailable` | Any other error (`reauth_required`, `not_signed_in`, rate limit, Google outage, storage error, network failure, malformed response) | Amber warning: "busy times are unknown — these blocks may overlap real events" + the Mission 11 error message |
+| State | When | Trust badge | UI |
+|-------|------|-------------|----|
+| `live` | Busy route returned a fully valid busy list | Green "Checked against primary calendar" | Caption: primary calendar only, open time isn't a guarantee of being free |
+| `not-connected` | `not_connected` (404) or `not_configured` (503) | Grey "Calendar not checked" | Calm note: the schedule doesn't check the calendar; per-link caution |
+| `unavailable` | Any other error (`reauth_required`, `not_signed_in`, rate limit, Google outage, storage error, network failure) **or any malformed busy data** | Amber "Calendar check failed — busy times unknown" | Amber warning: "busy times are unknown — these blocks may overlap real events" + the Mission 11 error message; per-link caution |
+
+**Busy-data validation:** a 200 response counts as `live` only if `busy` is an array and every period has two parseable instants with `end` after `start`. One invalid period (unparseable string, reversed or zero-length) makes the whole response `unavailable`. Invalid periods are never dropped silently, because that would turn unknown time into "free" time.
+
+### Keeping time-based checks fresh
+- `buildFreshSchedule` reads the clock again **after** the busy response arrives. Blocks are placed, and the "past" check runs, against that later instant, so a slow request can't produce blocks that have already started. If the local day changed while waiting, busy times are fetched again for the new day. If it changes yet again, availability is reported as unknown
+- While a draft is shown, conflicts are re-checked every 30 s, when the tab becomes visible again, and when the window regains focus
+- At click time the link's gate is re-evaluated with a fresh `new Date()`. If the block has slipped into the past since the last re-check, the click is cancelled and the warnings refresh
 
 When the schedule sees `reauth_required` (the server has already dropped the stored grant), the Google Calendar card is remounted so it re-checks status and shows **Connect**.
 
@@ -77,7 +87,9 @@ When the schedule sees `reauth_required` (the server has already dropped the sto
 | `lib/schedule/intervals.ts` | Epoch-ms interval merge / subtract / overlap |
 | `lib/schedule/engine.ts` | Pure, deterministic engine: window, placement, manual edits, conflicts, task reconciliation |
 | `lib/schedule/availability.ts` | `fetchScheduleBusy` (existing busy route, injectable fetch, never throws) and error → availability mapping |
-| `lib/schedule/calendarLink.ts` | Prefilled Google Calendar link (percent-encoded, length-capped, surrogate-safe) |
+| `lib/schedule/calendarLink.ts` | Prefilled Google Calendar link (title and times; notes only with `includeNotes`; percent-encoded, length-capped, surrogate-safe) |
+| `lib/schedule/linkGate.ts` | Calendar-link gate (disabled on any conflict, caution when unchecked) and availability trust labels |
+| `lib/schedule/freshSchedule.ts` | Fetch busy time, then generate against the post-response clock (midnight rollover handled) |
 | `lib/schedule/timeInput.ts` | `<input type="time">` helpers (`00:00` as end-of-day for the window end) |
 | `hooks/useDailySchedule.ts` | Transient draft state, generate / refresh / adjust |
 | `components/SmartDailySchedule.tsx` | UI, mounted under Today's Plan for signed-in users |
@@ -98,6 +110,12 @@ The handoff code compiled and linted, but review found these behaviour problems,
 9. **Revoked grant during scheduling** left the Calendar card showing "connected". The card now re-checks its status.
 10. Block badges show the Today's Plan rank, since blocks are listed in time order. Editing a time doesn't reorder the list, so the focused input never jumps.
 
+## GPT review round 1 fixes (on `3017724`)
+1. **Malformed busy data was misclassified as live.** The busy-period check only tested that `start`/`end` were strings. Periods are now validated strictly (`isValidBusyPeriod`: parseable, `end > start`), and one invalid period makes the whole response `unavailable`.
+2. **Conflicting or past blocks still offered a one-click link.** `calendarLinkGateFromConflicts` / `getCalendarLinkGate` now disable the link for any conflict and give the reason. A trust badge plus per-link cautions make the availability level obvious when no live check succeeded.
+3. **Notes were disclosed in the URL.** Links now carry the title and times only by default; notes require the explicit, unsaved opt-in checkbox. The URL and browser-history consequence is explained in the UI and in this file.
+4. **Stale time (recommended check).** `now` is taken after the busy response (`buildFreshSchedule`), time checks re-run periodically and on focus, and each link click re-checks against a fresh clock.
+
 ## Tests
 `npm test` runs `tests/**/*.test.ts` with Node's test runner (`tsx`). P2A adds:
 
@@ -106,9 +124,11 @@ The handoff code compiled and linted, but review found these behaviour problems,
 | `tests/schedule-engine.test.ts` | Priority and rank parity with Today's Plan in all three modes, completed/dismissed exclusion, earliest-fit, busy avoidance, grid snapping, buffers, durations, window-passed / no-free-time / too-long / no-room, never in the past, settings normalization, determinism and input-order independence, no input mutation, draft reconciliation, interval helpers |
 | `tests/schedule-conflicts.test.ts` | Manual moves and resizes, block/block and block/busy overlaps, back-to-back blocks, outside window, starts before now, no busy claims when availability is unknown, order-independence |
 | `tests/schedule-timezone.test.ts` | New York / Kolkata / Los Angeles / London windows, local vs UTC date, spring-forward and fall-back (23 h / 25 h days), non-existent and ambiguous local times, blocks across the gap and the repeated hour, edits on a transition day, zone-independent links |
-| `tests/schedule-availability.test.ts` | Busy-route request shape, every error code (incl. `reauth_required`, `not_signed_in`, `not_connected`, `not_configured`), non-JSON errors, network failure, malformed 200 bodies, unknown availability downstream |
-| `tests/schedule-calendar-link.test.ts` | URL shape, UTC stamps, `%20` / literal `/`, reserved and non-ASCII round-trip, details, caps, emoji and lone surrogates, invalid times, determinism |
+| `tests/schedule-availability.test.ts` | Busy-route request shape, every error code (incl. `reauth_required`, `not_signed_in`, `not_connected`, `not_configured`), non-JSON errors, network failure, malformed 200 bodies (invalid ISO strings, `end <= start`, mixed valid/invalid lists), strict period validation, unknown availability downstream with no false free-time claim |
+| `tests/schedule-calendar-link.test.ts` | URL shape, UTC stamps, `%20` / literal `/`, reserved and non-ASCII round-trip, details, caps, emoji and lone surrogates, invalid times, determinism; notes omitted by default and when `includeNotes: false`, included only with `includeNotes: true` |
 | `tests/schedule-time-input.test.ts` | Time input parsing and midnight end |
+| `tests/schedule-link-gate.test.ts` | Link disabled for busy overlap, block overlap, outside window, starts before now and missing task; matches precomputed conflicts; stale draft re-evaluated later disables started blocks (boundary at exactly `start`); cautions when not checked or unknown; trust labels |
+| `tests/schedule-fresh.test.ts` | Slow fetch (asked 09:58, answered 10:07) places blocks after the response, with no conflicts and links enabled at that instant; busy data used; failures passed through; midnight rollover re-fetches for the new day; an unstable clock gives unknown availability |
 | `tests/schedule-scope.test.ts` | Guard: OAuth scope still only `calendar.freebusy`; scheduling code has no Google API or events call, no storage or database access, and only uses `/api/google-calendar/busy` |
 
 ## Known limitations
@@ -116,7 +136,9 @@ The handoff code compiled and linted, but review found these behaviour problems,
 - Today only. Drafts aren't saved, and a draft left open past midnight isn't refreshed automatically (Regenerate fixes it)
 - Buffer spacing is applied when generating, but not re-checked after manual edits (overlaps are)
 - AI Planner can't detect whether the user saved a linked event; "Refresh availability" re-reads free/busy
-- Task notes are put into the Google link that the user opens (visible in the URL and browser history). This happens only when the user clicks
+- The link always contains the task **title** and times, which are visible in the URL and browser history once opened. Notes are added only on opt-in
+- With unknown or unchecked availability, links stay enabled with a visible caution rather than being disabled. Busy times are unknown in that case, not known to clash
+- Time checks re-run every 30 s. Between re-checks the display can lag, but the click-time check always uses the current time
 - A start time typed for a non-existent DST hour moves forward by an hour (browser `Date` behaviour)
 - The Smart Daily Schedule is shown only to signed-in users, like the Calendar card
 - No React component test framework in the repo (per AGENT_RULES: no heavy test frameworks), so the hook and component are covered by the pure-function tests plus a manual check
@@ -124,6 +146,7 @@ The handoff code compiled and linted, but review found these behaviour problems,
 ## Validation
 - `npm ci`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` pass
 - UI checked in a headless browser (desktop 1000 px and mobile 390 px, `America/New_York`) with a stubbed busy route: live state, a manual edit onto a busy period showing the warning immediately, revoked-access warning, link encoding, no console errors. The temporary preview page wasn't committed
+- Review round 1, browser check: notes absent from links by default and present after opt-in; a conflicting block shows a disabled button and reason; with the system clock moved past a block's start (no timers fired), clicking its still-rendered link opens nothing and shows "Starts before now"; malformed busy data shows the amber trust badge and per-link cautions
 
 ## Manual acceptance checklist (Sam, real accounts)
 Run on `http://localhost:3000` with `.env.local` (secrets entered by Sam from Bitwarden only), signed in with a magic link.
@@ -148,11 +171,15 @@ Run on `http://localhost:3000` with `.env.local` (secrets entered by Sam from Bi
 - [ ] **Change** window: start 13:00, end 00:00 (midnight) → Regenerate → blocks are in the afternoon/evening
 
 **4. Add to Google Calendar**
+- [ ] A task with notes: the link opens Google's form **without** the notes; tick "Include task notes in Google Calendar links" → the form now includes them; reload → the box is unticked again
+- [ ] Move a block onto a calendar event or another block → its "Add to Google Calendar" button is disabled with a reason; move it back → enabled again
+- [ ] Leave the page open until a block's start time passes (or put the computer to sleep across it) → that block shows "Starts before now" and its button is disabled within 30 s or on returning to the tab
 - [ ] Click **Add to Google Calendar** → a new tab opens Google's event form with the right title, date, start and end in your time zone, and details with the not-synced notice
 - [ ] Save it in Google, return, **Refresh availability** → the block now shows "Overlaps a busy time" (the saved event is busy)
 - [ ] Title with `&`, `#`, `%`, emoji or non-Latin text shows correctly in Google's form
 
-**5. Authorization**
+**5. Authorization and trust level**
+- [ ] Connected: the badge reads "Checked against primary calendar"; not connected: "Calendar not checked" plus a caution under each link; revoked or failing: amber "Calendar check failed — busy times unknown" plus a caution under each link
 - [ ] Not connected → Generate works and shows "isn't connected, so this schedule doesn't check your calendar"
 - [ ] Revoke AI Planner at <https://myaccount.google.com/permissions> → Generate → amber "busy times are unknown … access expired or was revoked" warning, and the Calendar card switches to **Connect**
 - [ ] Disconnect from the Calendar card → the schedule draft is cleared

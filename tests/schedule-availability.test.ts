@@ -10,11 +10,13 @@ import { describe, it } from "node:test";
 import {
   availabilityFromErrorCode,
   fetchScheduleBusy,
+  isValidBusyPeriod,
   NOT_CONFIGURED_MESSAGE,
   NOT_CONNECTED_MESSAGE,
   UNKNOWN_AVAILABILITY_PREFIX,
 } from "@/lib/schedule/availability";
 import { findScheduleConflicts, generateSchedule } from "@/lib/schedule/engine";
+import { getCalendarLinkGate, LINK_CAUTION_UNKNOWN } from "@/lib/schedule/linkGate";
 import { CALENDAR_ERROR_MESSAGES } from "@/types/calendar";
 import { busy, jsonResponse, settings, task } from "./helpers/scheduleFixtures";
 
@@ -144,6 +146,20 @@ describe("fetchScheduleBusy — authorization and other failures", () => {
     ["busy not an array", { busy: "nope" }],
     ["malformed period", { busy: [{ start: 1, end: 2 }] }],
     ["null body", null],
+    ["unparseable date strings", { busy: [{ start: "invalid", end: "also-invalid" }] }],
+    ["one unparseable end", { busy: [{ start: "2026-11-10T10:00:00Z", end: "soon" }] }],
+    ["end before start", { busy: [busy("2026-11-10T11:00:00Z", "2026-11-10T10:00:00Z")] }],
+    ["zero-length period", { busy: [busy("2026-11-10T10:00:00Z", "2026-11-10T10:00:00Z")] }],
+    [
+      "mixed valid and invalid periods",
+      {
+        busy: [
+          busy("2026-11-10T09:00:00Z", "2026-11-10T09:30:00Z"),
+          { start: "invalid", end: "also-invalid" },
+          busy("2026-11-10T13:00:00Z", "2026-11-10T14:00:00Z"),
+        ],
+      },
+    ],
   ] as const) {
     it(`treats a malformed 200 response (${label}) as unavailable, not empty`, async () => {
       const { impl } = fakeFetch(() => jsonResponse(200, body));
@@ -182,5 +198,63 @@ describe("unknown availability downstream", () => {
       }),
       [],
     );
+  });
+});
+
+describe("invalid busy data never becomes free time", () => {
+  it("validates individual periods strictly", () => {
+    assert.equal(isValidBusyPeriod(busy("2026-11-10T09:00:00Z", "2026-11-10T10:00:00Z")), true);
+    assert.equal(isValidBusyPeriod(busy("2026-11-10T09:00:00-05:00", "2026-11-10T10:00:00-05:00")), true);
+    for (const bad of [
+      busy("invalid", "also-invalid"),
+      busy("2026-11-10T09:00:00Z", ""),
+      busy("2026-13-45T99:00:00Z", "2026-11-10T10:00:00Z"),
+      busy("2026-11-10T10:00:00Z", "2026-11-10T09:00:00Z"),
+      busy("2026-11-10T10:00:00Z", "2026-11-10T10:00:00Z"),
+      { start: "2026-11-10T09:00:00Z" },
+      null,
+      "2026-11-10T09:00:00Z",
+    ]) {
+      assert.equal(isValidBusyPeriod(bad), false, JSON.stringify(bad));
+    }
+  });
+
+  it("a mixed list makes no availability claim: draft is unavailable, links carry a caution", async () => {
+    // The valid periods would block 09:00–09:30; the invalid one could have
+    // been hiding a meeting at any time. None of it may be trusted.
+    const { impl } = fakeFetch(() =>
+      jsonResponse(200, {
+        busy: [
+          busy("2026-11-10T09:00:00Z", "2026-11-10T09:30:00Z"),
+          { start: "invalid", end: "also-invalid" },
+        ],
+      }),
+    );
+    const result = await fetchScheduleBusy(WINDOW, impl);
+    assert.equal(result.availability, "unavailable");
+    assert.deepEqual(result.busy, []);
+    assert.ok(result.message?.startsWith(UNKNOWN_AVAILABILITY_PREFIX));
+
+    const now = new Date("2026-11-10T08:00:00Z");
+    const draft = generateSchedule({
+      tasks: [task("a", "important-urgent")],
+      mode: "auto",
+      dismissedIds: [],
+      busy: result.busy,
+      availability: result.availability,
+      now,
+      settings: settings(),
+    });
+    assert.equal(draft.availability, "unavailable");
+    const gate = getCalendarLinkGate({
+      taskId: "a",
+      blocks: draft.blocks,
+      busy: result.busy,
+      availability: draft.availability,
+      windowStart: draft.windowStart,
+      windowEnd: draft.windowEnd,
+      now,
+    });
+    assert.deepEqual(gate, { enabled: true, caution: LINK_CAUTION_UNKNOWN });
   });
 });

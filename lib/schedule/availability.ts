@@ -59,10 +59,20 @@ export interface BusyFetchResult extends AvailabilityOutcome {
   errorCode: CalendarErrorCode | null;
 }
 
-function isBusyPeriod(value: unknown): value is BusyPeriod {
+/**
+ * A usable busy period: two parseable instants with `end` after `start`.
+ * Anything else means the response can't be trusted as a whole — silently
+ * dropping a bad period would turn unknown time into "free" time.
+ */
+export function isValidBusyPeriod(value: unknown): value is BusyPeriod {
   if (!value || typeof value !== "object") return false;
   const period = value as Record<string, unknown>;
-  return typeof period.start === "string" && typeof period.end === "string";
+  if (typeof period.start !== "string" || typeof period.end !== "string") {
+    return false;
+  }
+  const start = Date.parse(period.start);
+  const end = Date.parse(period.end);
+  return Number.isFinite(start) && Number.isFinite(end) && end > start;
 }
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -101,7 +111,8 @@ export async function fetchScheduleBusy(
     }
 
     const body = (await response.json()) as { busy?: unknown };
-    if (!Array.isArray(body?.busy) || !body.busy.every(isBusyPeriod)) {
+    // One invalid period invalidates the whole list (never partially trusted).
+    if (!Array.isArray(body?.busy) || !body.busy.every(isValidBusyPeriod)) {
       return { busy: [], errorCode: null, ...availabilityFromNetworkFailure() };
     }
     return {

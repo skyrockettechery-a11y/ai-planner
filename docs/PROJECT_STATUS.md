@@ -71,7 +71,8 @@ Generates a suggested schedule for today from the Today's Plan top 3, placed aro
 
 - No calendar write-back (that is P2B, not approved), no OAuth scope change (`calendar.freebusy` only), no new routes, no database or schema change; drafts live in React state only
 - Automated tests cover priority, busy-time conflicts, manual edits, time zones/DST, authorization errors, determinism and calendar links; lint, typecheck, tests and build pass
-- Awaiting GPT review and Sam's manual acceptance checklist (in MISSION_12.md) before merge
+- GPT review round 1 addressed: malformed busy data is treated as unknown (never free); calendar links are disabled for conflicting or past blocks and re-checked at click time; links omit task notes unless the user opts in; the time check is taken after the calendar responds and re-run while the page is open
+- Awaiting further GPT review and Sam's real-Google manual acceptance checklist (in MISSION_12.md) before merge
 
 ---
 

@@ -1,19 +1,23 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePlanPreferences } from "@/hooks/usePlanPreferences";
 import { fetchScheduleBusy } from "@/lib/schedule/availability";
 import {
   adjustBlock,
   clampDurationMinutes,
-  computePlanningWindow,
   conflictsByTask,
   DEFAULT_SCHEDULE_SETTINGS,
   findScheduleConflicts,
-  generateSchedule,
   normalizeScheduleSettings,
   reconcileDraftWithTasks,
 } from "@/lib/schedule/engine";
+import { buildFreshSchedule } from "@/lib/schedule/freshSchedule";
+import {
+  getCalendarLinkGate,
+  LINK_BLOCKED_CONFLICT,
+  type CalendarLinkGate,
+} from "@/lib/schedule/linkGate";
 import type { BusyPeriod } from "@/types/calendar";
 import type {
   ScheduleBlock,
@@ -35,6 +39,14 @@ import type { Task } from "@/types/task";
  */
 
 export type SchedulePending = "generate" | "refresh" | null;
+
+/**
+ * How often the "starts before now" check is re-run while a draft is shown,
+ * so a page left open can't keep offering calendar links for blocks that
+ * have slipped into the past. It is also re-run when the tab regains focus
+ * and, for the link itself, at click time.
+ */
+export const CLOCK_RECHECK_MS = 30_000;
 
 export interface UseDailyScheduleOptions {
   /**
@@ -86,33 +98,28 @@ export function useDailySchedule(
 
   const generate = useCallback(async () => {
     const requestId = (requestIdRef.current += 1);
-    // One instant drives the window, placement and the "past" check, so a
-    // slow calendar response can't make a fresh block look like it starts
-    // in the past.
-    const now = new Date();
-    const window = computePlanningWindow(now, settings);
-
     setPending("generate");
-    const result = await fetchScheduleBusy(window);
+
+    // Blocks are placed — and the "past" check runs — against the time
+    // *after* the calendar responds, so a slow request can't leave blocks
+    // that already started looking valid.
+    const { draft: next, busyResult, now } = await buildFreshSchedule({
+      tasks: activeTasks,
+      mode: preferences.mode,
+      dismissedIds: preferences.dismissedIds,
+      settings,
+      durations,
+      fetchBusy: (window) => fetchScheduleBusy(window),
+      clock: () => new Date(),
+    });
     if (requestIdRef.current !== requestId) return;
 
-    setBusy(result.busy);
-    setAvailabilityMessage(result.message);
-    setRawDraft(
-      generateSchedule({
-        tasks: activeTasks,
-        mode: preferences.mode,
-        dismissedIds: preferences.dismissedIds,
-        busy: result.busy,
-        availability: result.availability,
-        now,
-        settings,
-        durations,
-      }),
-    );
+    setBusy(busyResult.busy);
+    setAvailabilityMessage(busyResult.message);
+    setRawDraft(next);
     setEvaluatedAt(now);
     setPending(null);
-    if (result.errorCode === "reauth_required") onCalendarAccessLost?.();
+    if (busyResult.errorCode === "reauth_required") onCalendarAccessLost?.();
   }, [
     activeTasks,
     durations,
@@ -185,6 +192,25 @@ export function useDailySchedule(
     [updateBlock],
   );
 
+  /** Re-runs time-based checks against the current clock. */
+  const recheckClock = useCallback(() => setEvaluatedAt(new Date()), []);
+
+  const hasDraft = rawDraft !== null;
+  useEffect(() => {
+    if (!hasDraft) return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") recheckClock();
+    };
+    const timer = window.setInterval(recheckClock, CLOCK_RECHECK_MS);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", recheckClock);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", recheckClock);
+    };
+  }, [hasDraft, recheckClock]);
+
   /** The draft as shown: hides tasks completed, deleted or dismissed since. */
   const draft = useMemo(
     () =>
@@ -215,6 +241,27 @@ export function useDailySchedule(
     [conflicts],
   );
 
+  /**
+   * Gate for one block's calendar link evaluated at `now` — called with a
+   * fresh clock at click time, so a stale render can't hand off a block that
+   * has since moved into the past.
+   */
+  const calendarLinkGateAt = useCallback(
+    (taskId: string, now: Date): CalendarLinkGate => {
+      if (!draft) return { enabled: false, reason: LINK_BLOCKED_CONFLICT };
+      return getCalendarLinkGate({
+        taskId,
+        blocks: draft.blocks,
+        busy,
+        availability: draft.availability,
+        windowStart: draft.windowStart,
+        windowEnd: draft.windowEnd,
+        now,
+      });
+    },
+    [busy, draft],
+  );
+
   return {
     settings,
     updateSettings,
@@ -226,6 +273,8 @@ export function useDailySchedule(
     pending,
     generate,
     refreshAvailability,
+    recheckClock,
+    calendarLinkGateAt,
     clear,
     setBlockStart,
     setBlockDuration,

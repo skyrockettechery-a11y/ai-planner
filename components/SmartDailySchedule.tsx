@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
 import { useDailySchedule } from "@/hooks/useDailySchedule";
 import { useDoingNow } from "@/hooks/useDoingNow";
 import { NOT_CONNECTED_MESSAGE } from "@/lib/schedule/availability";
@@ -10,11 +10,21 @@ import {
   UNSCHEDULED_REASON_MESSAGES,
 } from "@/lib/schedule/engine";
 import {
+  calendarLinkGateFromConflicts,
+  describeAvailabilityTrust,
+  type AvailabilityTrustLevel,
+  type CalendarLinkGate,
+} from "@/lib/schedule/linkGate";
+import {
   parseEndTimeInput,
   parseTimeInput,
   toTimeInputValue,
 } from "@/lib/schedule/timeInput";
-import type { ScheduleBlock, ScheduleConflict } from "@/types/schedule";
+import type {
+  ScheduleAvailability,
+  ScheduleBlock,
+  ScheduleConflict,
+} from "@/types/schedule";
 import type { Task } from "@/types/task";
 
 /**
@@ -68,20 +78,45 @@ function formatDuration(minutes: number): string {
   return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
 }
 
+const TRUST_BADGE_CLASS: Record<AvailabilityTrustLevel, string> = {
+  checked: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  "not-checked": "border-zinc-200 bg-zinc-50 text-zinc-700",
+  unknown: "border-amber-200 bg-amber-50 text-amber-900",
+};
+
+function TrustBadge({ availability }: { availability: ScheduleAvailability }) {
+  const trust = describeAvailabilityTrust(availability);
+  return (
+    <span
+      className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${TRUST_BADGE_CLASS[trust.level]}`}
+    >
+      {trust.label}
+    </span>
+  );
+}
+
 function BlockRow({
   block,
   conflicts,
+  linkGate,
+  includeNotes,
+  onCalendarLinkClick,
   onStart,
   onStartTimeChange,
   onDurationChange,
 }: {
   block: ScheduleBlock;
   conflicts: ScheduleConflict[];
+  linkGate: CalendarLinkGate;
+  includeNotes: boolean;
+  onCalendarLinkClick: (event: MouseEvent<HTMLAnchorElement>) => void;
   onStart: () => void;
   onStartTimeChange: (startMinute: number) => void;
   onDurationChange: (minutes: number) => void;
 }) {
-  const calendarUrl = buildGoogleCalendarEventUrl(block);
+  const calendarUrl = linkGate.enabled
+    ? buildGoogleCalendarEventUrl(block, { includeNotes })
+    : null;
   const durationOptions = DURATION_OPTIONS.includes(block.durationMinutes)
     ? DURATION_OPTIONS
     : [...DURATION_OPTIONS, block.durationMinutes].sort((a, b) => a - b);
@@ -162,17 +197,41 @@ function BlockRow({
             >
               Start
             </button>
-            {calendarUrl && (
+            {calendarUrl ? (
               <a
                 href={calendarUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={onCalendarLinkClick}
                 className={`${actionButtonClass} border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100`}
               >
                 Add to Google Calendar
               </a>
+            ) : (
+              <button
+                type="button"
+                disabled
+                aria-describedby={`calendar-link-note-${block.taskId}`}
+                className={`${actionButtonClass} border border-zinc-200 bg-white text-zinc-700`}
+              >
+                Add to Google Calendar
+              </button>
             )}
           </div>
+          {!linkGate.enabled ? (
+            <p
+              id={`calendar-link-note-${block.taskId}`}
+              className="mt-1.5 text-[11px] text-zinc-600"
+            >
+              {linkGate.reason}
+            </p>
+          ) : (
+            linkGate.caution && (
+              <p className="mt-1.5 text-[11px] text-amber-800">
+                {linkGate.caution}
+              </p>
+            )
+          )}
         </div>
       </div>
     </li>
@@ -193,9 +252,14 @@ export function SmartDailySchedule({
     pending,
     generate,
     refreshAvailability,
+    recheckClock,
+    calendarLinkGateAt,
     setBlockStart,
     setBlockDuration,
   } = useDailySchedule(activeTasks, { onCalendarAccessLost });
+
+  // Off by default and never saved: notes go into the link's URL.
+  const [includeNotes, setIncludeNotes] = useState(false);
 
   const [editingWindow, setEditingWindow] = useState(false);
 
@@ -205,6 +269,23 @@ export function SmartDailySchedule({
     draft.unscheduled.length === 0;
   const hasAdjustedBlocks =
     draft?.blocks.some((block) => block.adjusted) ?? false;
+  const anyBlockHasNotes =
+    draft?.blocks.some((block) => block.notes.trim() !== "") ?? false;
+
+  /**
+   * Final check at click time with a fresh clock: the rendered state may be
+   * up to one re-check interval old, so a block that has just slipped into
+   * the past is stopped here and the warnings refresh instead.
+   */
+  const handleCalendarLinkClick = (
+    event: MouseEvent<HTMLAnchorElement>,
+    taskId: string,
+  ) => {
+    if (!calendarLinkGateAt(taskId, new Date()).enabled) {
+      event.preventDefault();
+      recheckClock();
+    }
+  };
 
   return (
     <section
@@ -324,6 +405,12 @@ export function SmartDailySchedule({
         </div>
       )}
 
+      {draft && (
+        <div className="mt-3">
+          <TrustBadge availability={draft.availability} />
+        </div>
+      )}
+
       {draft && draft.availability === "not-connected" && (
         <p className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-700">
           {availabilityMessage ?? NOT_CONNECTED_MESSAGE}
@@ -366,6 +453,14 @@ export function SmartDailySchedule({
                   key={block.taskId}
                   block={block}
                   conflicts={conflictsByTaskId[block.taskId] ?? []}
+                  linkGate={calendarLinkGateFromConflicts(
+                    conflictsByTaskId[block.taskId] ?? [],
+                    draft.availability,
+                  )}
+                  includeNotes={includeNotes}
+                  onCalendarLinkClick={(event) =>
+                    handleCalendarLinkClick(event, block.taskId)
+                  }
                   onStart={() => setDoingNow(block.taskId)}
                   onStartTimeChange={(startMinute) =>
                     setBlockStart(block.taskId, startMinute)
@@ -376,6 +471,26 @@ export function SmartDailySchedule({
                 />
               ))}
             </ol>
+          )}
+
+          {anyBlockHasNotes && (
+            <div className="rounded-lg border border-zinc-100 bg-zinc-50/60 px-3 py-2">
+              <label className="flex items-start gap-2 text-xs text-zinc-700">
+                <input
+                  type="checkbox"
+                  checked={includeNotes}
+                  onChange={(event) => setIncludeNotes(event.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>Include task notes in Google Calendar links</span>
+              </label>
+              <p className="mt-1 pl-5 text-[11px] text-zinc-500">
+                Links carry the task title and times. Anything in a link is
+                part of its web address: opening it sends it to Google and
+                keeps it in your browser history, even if you don&apos;t save
+                the event. Off by default.
+              </p>
+            </div>
           )}
 
           {hasAdjustedBlocks && (

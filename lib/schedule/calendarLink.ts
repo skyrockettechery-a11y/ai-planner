@@ -11,6 +11,11 @@ import type { ScheduleBlock } from "@/types/schedule";
  * Times are emitted as UTC instants (`...Z`), which is the unambiguous form:
  * Google renders them in the user's own calendar time zone, so no `ctz`
  * parameter — and no guess about the viewer's zone — is required.
+ *
+ * Privacy: everything in the link is part of its URL. Opening it sends that
+ * text to Google and leaves it in browser history, even if the event is never
+ * saved. So the link carries only the task title and times by default; task
+ * notes are added only when the user explicitly opts in (`includeNotes`).
  */
 
 export const GOOGLE_CALENDAR_RENDER_ENDPOINT =
@@ -55,13 +60,21 @@ export function truncate(value: string, max: number): string {
   return chars.length <= max ? value : `${chars.slice(0, max - 1).join("")}…`;
 }
 
-export function buildEventDetails(block: {
-  notes: string;
-  durationMinutes: number;
-}): string {
+export interface CalendarLinkOptions {
+  /**
+   * Put the task's notes in the event details. Off by default: notes may be
+   * private, and URL contents end up at Google and in browser history.
+   */
+  includeNotes?: boolean;
+}
+
+export function buildEventDetails(
+  block: { notes: string; durationMinutes: number },
+  options: CalendarLinkOptions = {},
+): string {
   const header = `Planned in AI Planner — a ${block.durationMinutes}-minute focus block.`;
   const footer = `\n\n${NOT_SYNCED_NOTICE}`;
-  const notes = toWellFormed(block.notes.trim());
+  const notes = options.includeNotes ? toWellFormed(block.notes.trim()) : "";
   if (!notes) return `${header}${footer}`;
 
   // Long notes are shortened, never the header or the not-synced notice.
@@ -81,6 +94,7 @@ export function buildEventDetails(block: {
  */
 export function buildGoogleCalendarEventUrl(
   block: Pick<ScheduleBlock, "title" | "notes" | "start" | "end" | "durationMinutes">,
+  options: CalendarLinkOptions = {},
 ): string | null {
   const start = toGoogleUtcStamp(block.start);
   const end = toGoogleUtcStamp(block.end);
@@ -96,7 +110,7 @@ export function buildGoogleCalendarEventUrl(
     "action=TEMPLATE",
     `text=${encodeURIComponent(title)}`,
     `dates=${start}/${end}`,
-    `details=${encodeURIComponent(buildEventDetails(block))}`,
+    `details=${encodeURIComponent(buildEventDetails(block, options))}`,
   ].join("&");
 
   return `${GOOGLE_CALENDAR_RENDER_ENDPOINT}?${query}`;
