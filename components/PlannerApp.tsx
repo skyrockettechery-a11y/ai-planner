@@ -10,6 +10,7 @@ import { CompletedSection } from "@/components/CompletedSection";
 import { DailyOverview } from "@/components/DailyOverview";
 import { DoingNowSection } from "@/components/DoingNowSection";
 import { ImportLocalBanner } from "@/components/ImportLocalBanner";
+import { SmartDailySchedule } from "@/components/SmartDailySchedule";
 import { TaskForm } from "@/components/TaskForm";
 import { TodaysPlan } from "@/components/TodaysPlan";
 import { useAuth } from "@/hooks/useAuth";
@@ -54,6 +55,9 @@ export function PlannerApp({ devSupabaseDiagnostic = null }: PlannerAppProps) {
     string | null
   >(null);
   const [authCompleting, setAuthCompleting] = useState(false);
+  // Bumped when the Google Calendar connection drops, which remounts the
+  // Smart Daily Schedule so its transient draft is discarded (Mission 12).
+  const [calendarEpoch, setCalendarEpoch] = useState(0);
 
   const ready = hydrated && !authLoading && !authCompleting;
   useCloudSync(user?.id, ready && Boolean(user));
@@ -155,7 +159,19 @@ export function PlannerApp({ devSupabaseDiagnostic = null }: PlannerAppProps) {
 
       <TodaysPlan activeTasks={activeTasks} />
 
-      {user && <CalendarAvailability key={user.id} />}
+      {user && (
+        <SmartDailySchedule
+          key={`${user.id}:${calendarEpoch}`}
+          activeTasks={activeTasks}
+        />
+      )}
+
+      {user && (
+        <CalendarAvailability
+          key={user.id}
+          onDisconnected={() => setCalendarEpoch((epoch) => epoch + 1)}
+        />
+      )}
 
       <ActiveTasksSection
         tasks={activeTasks}
