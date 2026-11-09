@@ -94,6 +94,7 @@ When the schedule sees `reauth_required` (the server has already dropped the sto
 | `hooks/useDailySchedule.ts` | Transient draft state, generate / refresh / adjust |
 | `components/SmartDailySchedule.tsx` | UI, mounted under Today's Plan for signed-in users |
 | `components/PlannerApp.tsx`, `components/CalendarAvailability.tsx`, `hooks/useGoogleCalendar.ts` | Mounting, clearing drafts on disconnect, re-checking the card on revocation |
+| `lib/plannerKeys.ts` | Namespaced React keys for the two sibling sections (`schedule:<user>:<epoch>`, `calendar:<user>:<epoch>`) |
 
 No new API route, no server change, no database change, no new dependency.
 
@@ -116,6 +117,16 @@ The handoff code compiled and linted, but review found these behaviour problems,
 3. **Notes were disclosed in the URL.** Links now carry the title and times only by default; notes require the explicit, unsaved opt-in checkbox. The URL and browser-history consequence is explained in the UI and in this file.
 4. **Stale time (recommended check).** `now` is taken after the busy response (`buildFreshSchedule`), time checks re-run periodically and on focus, and each link click re-checks against a fresh clock.
 
+## Localhost acceptance fix: duplicate React key (review round 3, on `d30ce84`)
+**Symptom:** right after sign-in, React logged "Encountered two children with the same key, `<user-id>:0`" at `PlannerApp`.
+
+**Cause:** introduced in this PR. `SmartDailySchedule` was keyed `${user.id}:${calendarEpoch}` and its sibling `CalendarAvailability` was keyed `${user.id}:${calendarCardEpoch}`. Both counters start at 0, so the keys were identical on first render, and again whenever the counters were equal. A browser reproduction also showed the visible effect: the duplicate key confused React's reconciliation, and four copies of the Smart Daily Schedule were rendered.
+
+**Fix:** each key now carries a namespace (`lib/plannerKeys.ts`): `schedule:<user>:<calendarEpoch>` and `calendar:<user>:<calendarCardEpoch>`. The keys can no longer be equal, and each still changes only for its own reasons:
+- **Account change:** both sections remount (the user id is in both keys).
+- **Calendar disconnect** (from the card, or a revoked grant the card detects): `calendarEpoch` is bumped, so the schedule remounts and its draft is discarded.
+- **Lost authorization found by the schedule** (`reauth_required`): `calendarCardEpoch` is bumped, so only the card remounts and re-checks its status. The schedule keeps its warning.
+
 ## Tests
 `npm test` runs `tests/**/*.test.ts` with Node's test runner (`tsx`). P2A adds:
 
@@ -129,6 +140,7 @@ The handoff code compiled and linted, but review found these behaviour problems,
 | `tests/schedule-time-input.test.ts` | Time input parsing and midnight end |
 | `tests/schedule-link-gate.test.ts` | Link disabled for busy overlap, block overlap, outside window, starts before now and missing task; matches precomputed conflicts; stale draft re-evaluated later disables started blocks (boundary at exactly `start`); cautions when not checked or unknown; trust labels |
 | `tests/schedule-fresh.test.ts` | Slow fetch (asked 09:58, answered 10:07) places blocks after the response, with no conflicts and links enabled at that instant; busy data used; failures passed through; midnight rollover re-fetches for the new day; an unstable clock gives unknown availability |
+| `tests/planner-keys.test.ts` | Schedule and card keys never collide (all epoch combinations, including the 0/0 case that failed); they change on account change and only with their own epoch; `PlannerApp` uses the namespaced helpers, has no bare `${user.id}` key template, and keeps both remount triggers wired. This test fails against the previous `PlannerApp` |
 | `tests/schedule-scope.test.ts` | Guard: OAuth scope still only `calendar.freebusy`; scheduling code has no Google API or events call, no storage or database access, and only uses `/api/google-calendar/busy` |
 
 ## Known limitations
@@ -146,6 +158,9 @@ The handoff code compiled and linted, but review found these behaviour problems,
 ## Validation
 - `npm ci`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` pass
 - UI checked in a headless browser (desktop 1000 px and mobile 390 px, `America/New_York`) with a stubbed busy route: live state, a manual edit onto a busy period showing the warning immediately, revoked-access warning, link encoding, no console errors. The temporary preview page wasn't committed
+- Review round 3, signed-in browser check: `next dev` against a throwaway local fake Supabase API (fake session cookie, no real credentials) with the Google Calendar routes stubbed in Playwright.
+  - Old code: 4 duplicate-key errors after login and duplicated schedule sections.
+  - Fix: 0 duplicate-key errors after login, after Disconnect (the draft is cleared) and after a `reauth_required` during Generate (the card re-checks status and shows Connect, and the schedule keeps its warning).
 - Review round 1, browser check: notes absent from links by default and present after opt-in; a conflicting block shows a disabled button and reason; with the system clock moved past a block's start (no timers fired), clicking its still-rendered link opens nothing and shows "Starts before now"; malformed busy data shows the amber trust badge and per-link cautions
 
 ## Manual acceptance checklist (Sam, real accounts)
@@ -190,6 +205,7 @@ Run on `http://localhost:3000` with `.env.local` (secrets entered by Sam from Bi
 - [ ] Optional: with the system clock set to a DST-transition day, the window still starts at 09:00 local
 
 **7. Regression**
+- [ ] After signing in, the browser console shows no "Encountered two children with the same key" error, and there is exactly one Smart Daily Schedule section
 - [ ] Today's Plan, Doing Now (Start from a block sets Doing Now), task CRUD, sync and the Calendar busy-times card work as before
 - [ ] Network tab: only `/api/google-calendar/busy` is called by the schedule; no request writes to Google
 

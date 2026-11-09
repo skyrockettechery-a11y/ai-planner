@@ -21,6 +21,7 @@ import {
   countImportableLocalTasks,
   importLocalTasks,
 } from "@/lib/importLocal";
+import { calendarCardKey, scheduleSectionKey } from "@/lib/plannerKeys";
 import { reloadLocalState } from "@/lib/reloadLocal";
 import type { SupabaseConfigDiagnostic } from "@/lib/supabase/config";
 import { getActiveTasks, getCompletedTasks } from "@/lib/tasks";
@@ -164,7 +165,7 @@ export function PlannerApp({ devSupabaseDiagnostic = null }: PlannerAppProps) {
 
       {user && (
         <SmartDailySchedule
-          key={`${user.id}:${calendarEpoch}`}
+          key={scheduleSectionKey(user.id, calendarEpoch)}
           activeTasks={activeTasks}
           onCalendarAccessLost={() =>
             setCalendarCardEpoch((epoch) => epoch + 1)
@@ -174,7 +175,7 @@ export function PlannerApp({ devSupabaseDiagnostic = null }: PlannerAppProps) {
 
       {user && (
         <CalendarAvailability
-          key={`${user.id}:${calendarCardEpoch}`}
+          key={calendarCardKey(user.id, calendarCardEpoch)}
           onDisconnected={() => setCalendarEpoch((epoch) => epoch + 1)}
         />
       )}
