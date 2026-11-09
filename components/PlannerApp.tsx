@@ -58,6 +58,9 @@ export function PlannerApp({ devSupabaseDiagnostic = null }: PlannerAppProps) {
   // Bumped when the Google Calendar connection drops, which remounts the
   // Smart Daily Schedule so its transient draft is discarded (Mission 12).
   const [calendarEpoch, setCalendarEpoch] = useState(0);
+  // Bumped when the schedule finds Google Calendar access revoked, which
+  // remounts the Calendar card so it re-checks its connection status.
+  const [calendarCardEpoch, setCalendarCardEpoch] = useState(0);
 
   const ready = hydrated && !authLoading && !authCompleting;
   useCloudSync(user?.id, ready && Boolean(user));
@@ -163,12 +166,15 @@ export function PlannerApp({ devSupabaseDiagnostic = null }: PlannerAppProps) {
         <SmartDailySchedule
           key={`${user.id}:${calendarEpoch}`}
           activeTasks={activeTasks}
+          onCalendarAccessLost={() =>
+            setCalendarCardEpoch((epoch) => epoch + 1)
+          }
         />
       )}
 
       {user && (
         <CalendarAvailability
-          key={user.id}
+          key={`${user.id}:${calendarCardEpoch}`}
           onDisconnected={() => setCalendarEpoch((epoch) => epoch + 1)}
         />
       )}

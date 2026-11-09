@@ -1,8 +1,8 @@
 # Project Status
 
-**Last updated:** October 2026  
+**Last updated:** November 2026  
 **Production URL:** https://ai-planner-taupe.vercel.app  
-**Current milestone:** Mission 11 (Google Calendar Phase 1) — in review on `feature/google-calendar-phase1`
+**Current milestone:** Mission 12 (Smart Daily Scheduling, Calendar P2A) — Draft PR in review on `claude/p2a-smart-daily-scheduling-handoff`
 
 ---
 
@@ -26,7 +26,8 @@ AI Planner is a deployed, cross-device task planning app built with Next.js and 
 | Supabase cloud sync | ✅ Complete | Tasks and preferences sync across devices |
 | Email magic link auth | ✅ Complete | Primary auth method in production |
 | Quick capture layout | ✅ Complete | Add Task at top (Mission 08) |
-| Google Calendar availability | 🟡 In review | Phase 1: connect + free/busy view of the primary calendar (Mission 11); Google Cloud OAuth and the Supabase migration are done; server env vars (incl. `SUPABASE_SECRET_KEY`) still need to be set per environment |
+| Google Calendar availability | ✅ Merged | Phase 1: connect + free/busy view of the primary calendar (Mission 11, PR #1); server env vars (incl. `SUPABASE_SECRET_KEY`) must be set per environment |
+| Smart Daily Schedule | 🟡 In review | Calendar P2A (Mission 12): suggested time blocks for Today's Plan around busy times, manual adjustments, manual "Add to Google Calendar" links; drafts are in-memory only |
 
 ---
 
@@ -64,7 +65,17 @@ Local machines are development environments only — not the project source of t
 
 ---
 
-## Mission 11 — Google Calendar Phase 1 (approved, in review)
+## Mission 12 — Smart Daily Scheduling, Calendar P2A (approved, in review)
+
+Generates a suggested schedule for today from the Today's Plan top 3, placed around busy times on the primary Google Calendar. Users can change start times and lengths with immediate conflict warnings, start a block via Doing Now, and open a prefilled Google Calendar event form per block. Unknown availability (revoked grant, outage, network error) is shown as a warning, never as free time. See [MISSION_12.md](../MISSION_12.md).
+
+- No calendar write-back (that is P2B, not approved), no OAuth scope change (`calendar.freebusy` only), no new routes, no database or schema change; drafts live in React state only
+- Automated tests cover priority, busy-time conflicts, manual edits, time zones/DST, authorization errors, determinism and calendar links; lint, typecheck, tests and build pass
+- Awaiting GPT review and Sam's manual acceptance checklist (in MISSION_12.md) before merge
+
+---
+
+## Mission 11 — Google Calendar Phase 1 (merged)
 
 Owner-approved milestone: connect Google Calendar with the `calendar.freebusy` scope and show busy periods (today / tomorrow / next 7 days). Read-only; AI Planner stays the source of truth for tasks. See [MISSION_11.md](../MISSION_11.md).
 
@@ -120,7 +131,7 @@ Full index: [README.md](../README.md#documentation)
 
 - Not a realtime-synced app (refresh-based only)
 - Not using a real AI/LLM API (classification and planning are rule-based)
-- Not managing Google Calendar — Phase 1 only reads free/busy availability (no event creation, sync, or time blocking)
+- Not managing Google Calendar — AI Planner only reads free/busy availability. The Smart Daily Schedule (P2A) suggests time blocks and offers a link to Google's own event form; it never creates, edits or syncs events itself
 - Not a native mobile app
 
 See [PRODUCT_ROADMAP.md](./PRODUCT_ROADMAP.md) for planned next steps.

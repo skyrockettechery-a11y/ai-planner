@@ -1,7 +1,6 @@
 import { buildDailyPlan } from "@/lib/dailyPlan";
 import {
   freeIntervals,
-  mergeIntervals,
   overlaps,
   roundUpToStep,
   toBusyIntervals,
@@ -146,15 +145,18 @@ export interface GenerateScheduleInput {
 }
 
 /**
- * Packs the top recommended tasks into unoccupied time, earliest first.
+ * Places the top recommended tasks into open time.
  *
- * Placement is greedy in recommendation order and the cursor only moves
- * forward, so the resulting chronological order always matches priority
- * order. A task that cannot fit is reported in `unscheduled` instead of
- * displacing a higher-priority one.
+ * Tasks are placed one at a time in Today's Plan priority order, and each one
+ * takes the *earliest* open slot that fits it. A higher-priority task is
+ * therefore never displaced by a lower-priority one, while a short
+ * lower-priority task may still use an early gap that a longer,
+ * higher-priority task could not fit into. A task that cannot be placed is
+ * reported in `unscheduled` with a specific reason.
  *
- * The buffer applies between scheduled task blocks, not between a block and a
- * calendar event — a block may start the moment a meeting ends.
+ * The buffer applies between scheduled task blocks (on both sides), not
+ * between a block and a calendar event — a block may start the moment a
+ * meeting ends.
  */
 export function generateSchedule(input: GenerateScheduleInput): ScheduleDraft {
   const settings = normalizeScheduleSettings(input.settings);
@@ -166,34 +168,32 @@ export function generateSchedule(input: GenerateScheduleInput): ScheduleDraft {
     dismissedIds: input.dismissedIds,
   });
 
+  const remaining: Interval = { start: window.earliest, end: window.end };
   const busy = toBusyIntervals(input.busy, window);
-  const free = freeIntervals({ start: window.earliest, end: window.end }, busy);
-
-  const fallbackReason: UnscheduledReason =
-    window.end <= window.earliest
-      ? "window-passed"
-      : free.length === 0
-        ? "no-free-time"
-        : "no-room";
+  const calendarFree = freeIntervals(remaining, busy);
+  // Usable length of each open stretch once its start snaps to the grid.
+  const longestCalendarFree = calendarFree.reduce(
+    (longest, slot) =>
+      Math.max(longest, slot.end - roundUpToStep(slot.start, SLOT_STEP_MINUTES)),
+    0,
+  );
 
   const blocks: ScheduleBlock[] = [];
   const unscheduled: UnscheduledTask[] = [];
   const bufferMs = settings.bufferMinutes * MINUTE_MS;
-  let cursor = window.earliest;
+  /** Placed blocks padded by the buffer on both sides. */
+  const reserved: Interval[] = [];
 
-  for (const item of recommendations.slice(0, MAX_SCHEDULED_TASKS)) {
+  recommendations.slice(0, MAX_SCHEDULED_TASKS).forEach((item, index) => {
+    const rank = index + 1;
     const durationMinutes = clampDurationMinutes(
       input.durations?.[item.task.id] ?? settings.defaultDurationMinutes,
     );
     const durationMs = durationMinutes * MINUTE_MS;
 
     let placement: Interval | null = null;
-    for (const slot of free) {
-      if (slot.end <= cursor) continue;
-      const candidate = roundUpToStep(
-        Math.max(slot.start, cursor),
-        SLOT_STEP_MINUTES,
-      );
+    for (const slot of freeIntervals(remaining, [...busy, ...reserved])) {
+      const candidate = roundUpToStep(slot.start, SLOT_STEP_MINUTES);
       if (candidate + durationMs <= slot.end) {
         placement = { start: candidate, end: candidate + durationMs };
         break;
@@ -203,15 +203,28 @@ export function generateSchedule(input: GenerateScheduleInput): ScheduleDraft {
     if (!placement) {
       unscheduled.push({
         taskId: item.task.id,
+        rank,
         title: item.task.title,
         durationMinutes,
-        reason: fallbackReason,
+        reason:
+          remaining.end <= remaining.start
+            ? "window-passed"
+            : calendarFree.length === 0
+              ? "no-free-time"
+              : durationMs > longestCalendarFree
+                ? "too-long"
+                : "no-room",
       });
-      continue;
+      return;
     }
 
+    reserved.push({
+      start: placement.start - bufferMs,
+      end: placement.end + bufferMs,
+    });
     blocks.push({
       taskId: item.task.id,
+      rank,
       title: item.task.title,
       notes: item.task.notes,
       reason: item.reason,
@@ -220,17 +233,68 @@ export function generateSchedule(input: GenerateScheduleInput): ScheduleDraft {
       durationMinutes,
       adjusted: false,
     });
-    cursor = placement.end + bufferMs;
-  }
+  });
 
   return {
     windowStart: new Date(window.start).toISOString(),
     windowEnd: new Date(window.end).toISOString(),
     earliestStart: new Date(window.earliest).toISOString(),
     availability: input.availability,
-    blocks,
+    blocks: sortBlocksChronologically(blocks),
     unscheduled,
   };
+}
+
+/** Chronological order; ties broken by rank so the order is total. */
+export function sortBlocksChronologically(
+  blocks: readonly ScheduleBlock[],
+): ScheduleBlock[] {
+  return [...blocks].sort(
+    (a, b) => Date.parse(a.start) - Date.parse(b.start) || a.rank - b.rank,
+  );
+}
+
+/**
+ * The draft as it should be shown *now*, given the live task list.
+ *
+ * Drafts are snapshots, but tasks keep changing. This hides blocks for tasks
+ * that were completed, deleted or dismissed from Today's Plan after the draft
+ * was generated, and refreshes titles and notes that were edited. It is a
+ * view, not a mutation: restoring or un-dismissing a task brings its block
+ * back unchanged.
+ */
+export function reconcileDraftWithTasks(
+  draft: ScheduleDraft,
+  activeTasks: readonly Task[],
+  dismissedIds: readonly string[],
+): ScheduleDraft {
+  const dismissed = new Set(dismissedIds);
+  const live = new Map(
+    activeTasks
+      .filter((task) => !task.completed && !dismissed.has(task.id))
+      .map((task) => [task.id, task]),
+  );
+
+  const blocks = draft.blocks.flatMap((block) => {
+    const task = live.get(block.taskId);
+    if (!task) return [];
+    return task.title === block.title && task.notes === block.notes
+      ? [block]
+      : [{ ...block, title: task.title, notes: task.notes }];
+  });
+  const unscheduled = draft.unscheduled.flatMap((item) => {
+    const task = live.get(item.taskId);
+    if (!task) return [];
+    return task.title === item.title ? [item] : [{ ...item, title: task.title }];
+  });
+
+  const unchanged =
+    blocks.length === draft.blocks.length &&
+    blocks.every((block, index) => block === draft.blocks[index]) &&
+    unscheduled.length === draft.unscheduled.length &&
+    unscheduled.every((item, index) => item === draft.unscheduled[index]);
+
+  return unchanged ? draft : { ...draft, blocks, unscheduled };
 }
 
 /** Applies a hand edit to one block, re-anchored to the draft's planning day. */
@@ -292,9 +356,7 @@ export function findScheduleConflicts(input: ConflictInput): ScheduleConflict[] 
     .sort((a, b) => a.interval.start - b.interval.start);
 
   const busy =
-    input.availability === "live"
-      ? mergeIntervals(toBusyIntervals(input.busy))
-      : [];
+    input.availability === "live" ? toBusyIntervals(input.busy) : [];
 
   const conflicts: ScheduleConflict[] = [];
   for (const { block, interval } of entries) {
@@ -302,7 +364,7 @@ export function findScheduleConflicts(input: ConflictInput): ScheduleConflict[] 
       conflicts.push({
         taskId: block.taskId,
         kind: "past",
-        message: "Starts in the past.",
+        message: "Starts before now.",
       });
     }
 
@@ -356,6 +418,8 @@ export const UNSCHEDULED_REASON_MESSAGES: Record<UnscheduledReason, string> = {
   "window-passed":
     "Today's planning window has already ended — extend the end time to schedule this.",
   "no-free-time": "Your primary calendar is busy for the whole remaining window.",
+  "too-long":
+    "Longer than any open stretch left today — shorten it or widen the window.",
   "no-room":
-    "Doesn't fit in the open time left — shorten it or widen the window.",
+    "Higher-priority tasks took the open time — shorten something or widen the window.",
 };

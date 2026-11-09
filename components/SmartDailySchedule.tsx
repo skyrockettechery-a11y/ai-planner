@@ -3,14 +3,17 @@
 import { useState } from "react";
 import { useDailySchedule } from "@/hooks/useDailySchedule";
 import { useDoingNow } from "@/hooks/useDoingNow";
-import {
-  NOT_CONNECTED_MESSAGE,
-} from "@/lib/schedule/availability";
+import { NOT_CONNECTED_MESSAGE } from "@/lib/schedule/availability";
 import { buildGoogleCalendarEventUrl } from "@/lib/schedule/calendarLink";
 import {
   MAX_BUFFER_MINUTES,
   UNSCHEDULED_REASON_MESSAGES,
 } from "@/lib/schedule/engine";
+import {
+  parseEndTimeInput,
+  parseTimeInput,
+  toTimeInputValue,
+} from "@/lib/schedule/timeInput";
 import type { ScheduleBlock, ScheduleConflict } from "@/types/schedule";
 import type { Task } from "@/types/task";
 
@@ -26,6 +29,8 @@ import type { Task } from "@/types/task";
 
 interface SmartDailyScheduleProps {
   activeTasks: Task[];
+  /** Google Calendar access was revoked/expired while checking availability. */
+  onCalendarAccessLost?: () => void;
 }
 
 const DURATION_OPTIONS = [15, 30, 45, 60, 90, 120];
@@ -36,21 +41,6 @@ const actionButtonClass =
 
 const fieldClass =
   "min-h-9 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-xs text-zinc-800";
-
-function toTimeInputValue(minuteOfDay: number): string {
-  const hours = Math.floor(minuteOfDay / 60) % 24;
-  const minutes = minuteOfDay % 60;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
-}
-
-function parseTimeInput(value: string): number | null {
-  const match = /^(\d{1,2}):(\d{2})$/.exec(value);
-  if (!match) return null;
-  const hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  if (hours > 23 || minutes > 59) return null;
-  return hours * 60 + minutes;
-}
 
 function localMinuteOfDay(iso: string): number {
   const date = new Date(iso);
@@ -80,14 +70,12 @@ function formatDuration(minutes: number): string {
 
 function BlockRow({
   block,
-  index,
   conflicts,
   onStart,
   onStartTimeChange,
   onDurationChange,
 }: {
   block: ScheduleBlock;
-  index: number;
   conflicts: ScheduleConflict[];
   onStart: () => void;
   onStartTimeChange: (startMinute: number) => void;
@@ -101,8 +89,12 @@ function BlockRow({
   return (
     <li className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50/60 px-3 py-2.5">
       <div className="flex flex-wrap items-start gap-2">
-        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-xs font-semibold text-white">
-          {index + 1}
+        <span
+          title={`#${block.rank} in Today's Plan`}
+          className="flex size-6 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-xs font-semibold text-white"
+        >
+          <span aria-hidden="true">{block.rank}</span>
+          <span className="sr-only">Priority {block.rank} in Today&apos;s Plan:</span>
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -187,7 +179,10 @@ function BlockRow({
   );
 }
 
-export function SmartDailySchedule({ activeTasks }: SmartDailyScheduleProps) {
+export function SmartDailySchedule({
+  activeTasks,
+  onCalendarAccessLost,
+}: SmartDailyScheduleProps) {
   const { setDoingNow } = useDoingNow();
   const {
     settings,
@@ -195,13 +190,12 @@ export function SmartDailySchedule({ activeTasks }: SmartDailyScheduleProps) {
     draft,
     conflictsByTaskId,
     availabilityMessage,
-    generating,
-    refreshing,
+    pending,
     generate,
     refreshAvailability,
     setBlockStart,
     setBlockDuration,
-  } = useDailySchedule(activeTasks);
+  } = useDailySchedule(activeTasks, { onCalendarAccessLost });
 
   const [editingWindow, setEditingWindow] = useState(false);
 
@@ -209,6 +203,8 @@ export function SmartDailySchedule({ activeTasks }: SmartDailyScheduleProps) {
     draft !== null &&
     draft.blocks.length === 0 &&
     draft.unscheduled.length === 0;
+  const hasAdjustedBlocks =
+    draft?.blocks.some((block) => block.adjusted) ?? false;
 
   return (
     <section
@@ -231,10 +227,10 @@ export function SmartDailySchedule({ activeTasks }: SmartDailyScheduleProps) {
         <button
           type="button"
           onClick={() => void generate()}
-          disabled={generating}
+          disabled={pending !== null}
           className={`${actionButtonClass} shrink-0 bg-zinc-900 text-white hover:bg-zinc-700`}
         >
-          {generating
+          {pending === "generate"
             ? "Generating…"
             : draft
               ? "Regenerate"
@@ -278,7 +274,7 @@ export function SmartDailySchedule({ activeTasks }: SmartDailyScheduleProps) {
               type="time"
               value={toTimeInputValue(settings.endMinute)}
               onChange={(event) => {
-                const minute = parseTimeInput(event.target.value);
+                const minute = parseEndTimeInput(event.target.value);
                 if (minute !== null) updateSettings({ endMinute: minute });
               }}
               className={fieldClass}
@@ -321,8 +317,9 @@ export function SmartDailySchedule({ activeTasks }: SmartDailyScheduleProps) {
             </select>
           </label>
           <p className="basis-full text-[11px] text-zinc-500">
-            Changes apply the next time you generate. Window settings are not
-            saved between visits.
+            Changes apply the next time you generate. Set End to midnight
+            (00:00 / 12:00 AM) to plan to the end of the day. Window settings are not saved between
+            visits.
           </p>
         </div>
       )}
@@ -364,11 +361,10 @@ export function SmartDailySchedule({ activeTasks }: SmartDailyScheduleProps) {
         <div className="mt-3 space-y-3">
           {draft.blocks.length > 0 && (
             <ol className="space-y-3">
-              {draft.blocks.map((block, index) => (
+              {draft.blocks.map((block) => (
                 <BlockRow
                   key={block.taskId}
                   block={block}
-                  index={index}
                   conflicts={conflictsByTaskId[block.taskId] ?? []}
                   onStart={() => setDoingNow(block.taskId)}
                   onStartTimeChange={(startMinute) =>
@@ -382,6 +378,13 @@ export function SmartDailySchedule({ activeTasks }: SmartDailyScheduleProps) {
             </ol>
           )}
 
+          {hasAdjustedBlocks && (
+            <p className="text-[11px] text-zinc-500">
+              Regenerate re-plans start times from scratch; lengths you chose
+              are kept.
+            </p>
+          )}
+
           {draft.unscheduled.length > 0 && (
             <div className="rounded-lg border border-zinc-100 bg-white px-3 py-2.5">
               <p className="text-xs font-medium text-zinc-700">
@@ -391,7 +394,7 @@ export function SmartDailySchedule({ activeTasks }: SmartDailyScheduleProps) {
                 {draft.unscheduled.map((item) => (
                   <li key={item.taskId} className="text-xs text-zinc-600">
                     <span className="font-medium text-zinc-800">
-                      {item.title}
+                      #{item.rank} {item.title}
                     </span>{" "}
                     ({formatDuration(item.durationMinutes)}) —{" "}
                     {UNSCHEDULED_REASON_MESSAGES[item.reason]}
@@ -405,10 +408,10 @@ export function SmartDailySchedule({ activeTasks }: SmartDailyScheduleProps) {
             <button
               type="button"
               onClick={() => void refreshAvailability()}
-              disabled={refreshing || generating}
+              disabled={pending !== null}
               className={`${actionButtonClass} border border-zinc-200 text-zinc-700 hover:bg-zinc-50`}
             >
-              {refreshing ? "Refreshing…" : "Refresh availability"}
+              {pending === "refresh" ? "Refreshing…" : "Refresh availability"}
             </button>
             <p className="text-[11px] text-zinc-500">
               Saved an event in Google Calendar? Refresh to check availability

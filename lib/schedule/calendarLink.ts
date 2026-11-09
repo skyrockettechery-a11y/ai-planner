@@ -13,13 +13,18 @@ import type { ScheduleBlock } from "@/types/schedule";
  * parameter — and no guess about the viewer's zone — is required.
  */
 
-const RENDER_ENDPOINT = "https://calendar.google.com/calendar/render";
+export const GOOGLE_CALENDAR_RENDER_ENDPOINT =
+  "https://calendar.google.com/calendar/render";
 
-/** Longest title/notes Google reliably accepts in a template URL. */
-const MAX_TITLE_LENGTH = 300;
-const MAX_DETAILS_LENGTH = 1000;
+/**
+ * Caps keep the whole URL well under the ~8 KB that Google's front end
+ * accepts, even when every character is a 3-byte UTF-8 code point
+ * percent-encoded to 9 characters.
+ */
+export const MAX_TITLE_LENGTH = 200;
+export const MAX_DETAILS_LENGTH = 500;
 
-const NOT_SYNCED_NOTICE =
+export const NOT_SYNCED_NOTICE =
   "This is a one-time copy. It does not stay in sync with the AI Planner task.";
 
 /** `YYYYMMDDTHHMMSSZ` — Google's basic-format UTC timestamp. */
@@ -32,41 +37,67 @@ export function toGoogleUtcStamp(iso: string): string | null {
     .replace(/\.\d{3}Z$/, "Z");
 }
 
-function truncate(value: string, max: number): string {
-  return value.length <= max ? value : `${value.slice(0, max - 1)}…`;
+/**
+ * Replaces lone UTF-16 surrogates with U+FFFD. `encodeURIComponent` throws on
+ * them, and one malformed character must not break the whole link.
+ */
+export function toWellFormed(value: string): string {
+  return Array.from(value)
+    .map((char) =>
+      char.length === 1 && char >= "\uD800" && char <= "\uDFFF" ? "\uFFFD" : char,
+    )
+    .join("");
+}
+
+/** Truncates by code point so a surrogate pair (e.g. an emoji) is never split. */
+export function truncate(value: string, max: number): string {
+  const chars = Array.from(value);
+  return chars.length <= max ? value : `${chars.slice(0, max - 1).join("")}…`;
 }
 
 export function buildEventDetails(block: {
   notes: string;
   durationMinutes: number;
 }): string {
-  const parts = [
-    `Planned in AI Planner — a ${block.durationMinutes}-minute focus block.`,
-  ];
-  const notes = block.notes.trim();
-  if (notes) parts.push("", notes);
-  parts.push("", NOT_SYNCED_NOTICE);
-  return truncate(parts.join("\n"), MAX_DETAILS_LENGTH);
+  const header = `Planned in AI Planner — a ${block.durationMinutes}-minute focus block.`;
+  const footer = `\n\n${NOT_SYNCED_NOTICE}`;
+  const notes = toWellFormed(block.notes.trim());
+  if (!notes) return `${header}${footer}`;
+
+  // Long notes are shortened, never the header or the not-synced notice.
+  const room =
+    MAX_DETAILS_LENGTH - Array.from(header).length - Array.from(footer).length - 2;
+  return `${header}\n\n${truncate(notes, Math.max(room, 1))}${footer}`;
 }
 
 /**
  * A prefilled Google Calendar event-creation URL for one suggested block,
- * or `null` if the block's times can't be parsed (nothing is better than a
- * link to the wrong time).
+ * or `null` if the block's times can't be parsed or are out of order
+ * (nothing is better than a link to the wrong time).
+ *
+ * Values are percent-encoded with `encodeURIComponent` (spaces become `%20`,
+ * never `+`), and the `dates` separator stays a literal `/` as in Google's
+ * documented format.
  */
 export function buildGoogleCalendarEventUrl(
   block: Pick<ScheduleBlock, "title" | "notes" | "start" | "end" | "durationMinutes">,
 ): string | null {
   const start = toGoogleUtcStamp(block.start);
   const end = toGoogleUtcStamp(block.end);
-  if (!start || !end) return null;
+  if (!start || !end || Date.parse(block.end) <= Date.parse(block.start)) {
+    return null;
+  }
 
-  const params = new URLSearchParams({
-    action: "TEMPLATE",
-    text: truncate(block.title.trim() || "Untitled task", MAX_TITLE_LENGTH),
-    dates: `${start}/${end}`,
-    details: buildEventDetails(block),
-  });
+  const title = truncate(
+    toWellFormed(block.title.trim()) || "Untitled task",
+    MAX_TITLE_LENGTH,
+  );
+  const query = [
+    "action=TEMPLATE",
+    `text=${encodeURIComponent(title)}`,
+    `dates=${start}/${end}`,
+    `details=${encodeURIComponent(buildEventDetails(block))}`,
+  ].join("&");
 
-  return `${RENDER_ENDPOINT}?${params.toString()}`;
+  return `${GOOGLE_CALENDAR_RENDER_ENDPOINT}?${query}`;
 }

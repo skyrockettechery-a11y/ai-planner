@@ -2,10 +2,7 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import { usePlanPreferences } from "@/hooks/usePlanPreferences";
-import {
-  availabilityFromErrorCode,
-  availabilityFromNetworkFailure,
-} from "@/lib/schedule/availability";
+import { fetchScheduleBusy } from "@/lib/schedule/availability";
 import {
   adjustBlock,
   clampDurationMinutes,
@@ -15,15 +12,11 @@ import {
   findScheduleConflicts,
   generateSchedule,
   normalizeScheduleSettings,
+  reconcileDraftWithTasks,
 } from "@/lib/schedule/engine";
-import type { PlanningWindow } from "@/lib/schedule/engine";
-import {
-  isCalendarErrorCode,
-  type BusyPeriod,
-  type BusyResponse,
-} from "@/types/calendar";
+import type { BusyPeriod } from "@/types/calendar";
 import type {
-  ScheduleAvailability,
+  ScheduleBlock,
   ScheduleDraft,
   ScheduleSettings,
 } from "@/types/schedule";
@@ -41,59 +34,38 @@ import type { Task } from "@/types/task";
  * `/api/google-calendar/busy` route; no new endpoint and no new OAuth scope.
  */
 
-interface BusyFetchResult {
-  busy: BusyPeriod[];
-  availability: ScheduleAvailability;
-  message: string | null;
+export type SchedulePending = "generate" | "refresh" | null;
+
+export interface UseDailyScheduleOptions {
+  /**
+   * Called when the busy route reports that Google Calendar access was
+   * revoked or expired (the server has already dropped the stored
+   * connection), so the Calendar card can re-check its status.
+   */
+  onCalendarAccessLost?: () => void;
 }
 
-async function fetchBusyPeriods(window: PlanningWindow): Promise<BusyFetchResult> {
-  const query = new URLSearchParams({
-    timeMin: new Date(window.start).toISOString(),
-    timeMax: new Date(window.end).toISOString(),
-  });
-
-  try {
-    const response = await fetch(`/api/google-calendar/busy?${query}`, {
-      cache: "no-store",
-    });
-    if (!response.ok) {
-      let code: unknown;
-      try {
-        ({ error: code } = (await response.json()) as { error?: unknown });
-      } catch {
-        code = undefined;
-      }
-      const outcome = isCalendarErrorCode(code)
-        ? availabilityFromErrorCode(code)
-        : availabilityFromNetworkFailure();
-      // Busy time is unknown, not empty — the caller must warn, not assume.
-      return { busy: [], ...outcome };
-    }
-    const body = (await response.json()) as BusyResponse;
-    return { busy: body.busy ?? [], availability: "live", message: null };
-  } catch {
-    return { busy: [], ...availabilityFromNetworkFailure() };
-  }
-}
-
-export function useDailySchedule(activeTasks: Task[]) {
+export function useDailySchedule(
+  activeTasks: Task[],
+  options: UseDailyScheduleOptions = {},
+) {
+  const { onCalendarAccessLost } = options;
   const { preferences } = usePlanPreferences();
 
   const [settings, setSettings] = useState<ScheduleSettings>(
     DEFAULT_SCHEDULE_SETTINGS,
   );
   const [durations, setDurations] = useState<Record<string, number>>({});
-  const [draft, setDraft] = useState<ScheduleDraft | null>(null);
+  const [rawDraft, setRawDraft] = useState<ScheduleDraft | null>(null);
   const [busy, setBusy] = useState<BusyPeriod[]>([]);
   const [availabilityMessage, setAvailabilityMessage] = useState<string | null>(
     null,
   );
+  /** Instant the "starts before now" check is evaluated against. */
   const [evaluatedAt, setEvaluatedAt] = useState<Date | null>(null);
-  const [generating, setGenerating] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const [pending, setPending] = useState<SchedulePending>(null);
 
-  /** Drops responses from a superseded Generate/Refresh click. */
+  /** Drops responses from a superseded request (or after `clear`). */
   const requestIdRef = useRef(0);
 
   const updateSettings = useCallback((patch: Partial<ScheduleSettings>) => {
@@ -104,27 +76,29 @@ export function useDailySchedule(activeTasks: Task[]) {
 
   const clear = useCallback(() => {
     requestIdRef.current += 1;
-    setDraft(null);
+    setRawDraft(null);
     setBusy([]);
     setAvailabilityMessage(null);
     setEvaluatedAt(null);
     setDurations({});
-    setGenerating(false);
-    setRefreshing(false);
+    setPending(null);
   }, []);
 
   const generate = useCallback(async () => {
     const requestId = (requestIdRef.current += 1);
+    // One instant drives the window, placement and the "past" check, so a
+    // slow calendar response can't make a fresh block look like it starts
+    // in the past.
     const now = new Date();
     const window = computePlanningWindow(now, settings);
 
-    setGenerating(true);
-    const result = await fetchBusyPeriods(window);
+    setPending("generate");
+    const result = await fetchScheduleBusy(window);
     if (requestIdRef.current !== requestId) return;
 
     setBusy(result.busy);
     setAvailabilityMessage(result.message);
-    setDraft(
+    setRawDraft(
       generateSchedule({
         tasks: activeTasks,
         mode: preferences.mode,
@@ -136,77 +110,93 @@ export function useDailySchedule(activeTasks: Task[]) {
         durations,
       }),
     );
-    setEvaluatedAt(new Date());
-    setGenerating(false);
-  }, [activeTasks, durations, preferences.dismissedIds, preferences.mode, settings]);
+    setEvaluatedAt(now);
+    setPending(null);
+    if (result.errorCode === "reauth_required") onCalendarAccessLost?.();
+  }, [
+    activeTasks,
+    durations,
+    onCalendarAccessLost,
+    preferences.dismissedIds,
+    preferences.mode,
+    settings,
+  ]);
 
   /**
    * Re-checks the calendar without re-packing, so hand adjustments survive.
    * Offered after the user returns from saving an event in Google Calendar.
    */
   const refreshAvailability = useCallback(async () => {
-    if (!draft) return;
+    if (!rawDraft) return;
     const requestId = (requestIdRef.current += 1);
 
-    setRefreshing(true);
-    const result = await fetchBusyPeriods({
-      start: Date.parse(draft.windowStart),
-      end: Date.parse(draft.windowEnd),
-      earliest: Date.parse(draft.earliestStart),
+    setPending("refresh");
+    const result = await fetchScheduleBusy({
+      start: Date.parse(rawDraft.windowStart),
+      end: Date.parse(rawDraft.windowEnd),
     });
     if (requestIdRef.current !== requestId) return;
 
     setBusy(result.busy);
     setAvailabilityMessage(result.message);
-    setDraft((current) =>
+    setRawDraft((current) =>
       current ? { ...current, availability: result.availability } : current,
     );
     setEvaluatedAt(new Date());
-    setRefreshing(false);
-  }, [draft]);
+    setPending(null);
+    if (result.errorCode === "reauth_required") onCalendarAccessLost?.();
+  }, [onCalendarAccessLost, rawDraft]);
 
-  /** Local day the draft is anchored to, used to re-place adjusted blocks. */
-  const planningDay = useMemo(
-    () => (draft ? new Date(draft.windowStart) : null),
-    [draft],
-  );
-
-  const setBlockStart = useCallback(
-    (taskId: string, startMinute: number) => {
-      setDraft((current) => {
+  const updateBlock = useCallback(
+    (
+      taskId: string,
+      changes: { startMinute?: number; durationMinutes?: number },
+    ) => {
+      setRawDraft((current) => {
         if (!current) return current;
+        // Re-anchor to the draft's own local day, not "today", so a draft
+        // left open past midnight is still edited on the day it describes.
         const anchor = new Date(current.windowStart);
-        return {
-          ...current,
-          blocks: current.blocks.map((block) =>
-            block.taskId === taskId
-              ? adjustBlock(block, { startMinute }, anchor)
-              : block,
-          ),
-        };
+        // Order is left as generated: re-sorting while the user types a time
+        // would move the focused input. Overlaps are flagged as conflicts.
+        const blocks: ScheduleBlock[] = current.blocks.map((block) =>
+          block.taskId === taskId ? adjustBlock(block, changes, anchor) : block,
+        );
+        return { ...current, blocks };
       });
       setEvaluatedAt(new Date());
     },
     [],
   );
 
-  const setBlockDuration = useCallback((taskId: string, minutes: number) => {
-    const durationMinutes = clampDurationMinutes(minutes);
-    setDurations((current) => ({ ...current, [taskId]: durationMinutes }));
-    setDraft((current) => {
-      if (!current) return current;
-      const anchor = new Date(current.windowStart);
-      return {
-        ...current,
-        blocks: current.blocks.map((block) =>
-          block.taskId === taskId
-            ? adjustBlock(block, { durationMinutes }, anchor)
-            : block,
-        ),
-      };
-    });
-    setEvaluatedAt(new Date());
-  }, []);
+  const setBlockStart = useCallback(
+    (taskId: string, startMinute: number) =>
+      updateBlock(taskId, { startMinute }),
+    [updateBlock],
+  );
+
+  const setBlockDuration = useCallback(
+    (taskId: string, minutes: number) => {
+      const durationMinutes = clampDurationMinutes(minutes);
+      // Remembered so Regenerate keeps the length the user chose.
+      setDurations((current) => ({ ...current, [taskId]: durationMinutes }));
+      updateBlock(taskId, { durationMinutes });
+    },
+    [updateBlock],
+  );
+
+  /** The draft as shown: hides tasks completed, deleted or dismissed since. */
+  const draft = useMemo(
+    () =>
+      rawDraft
+        ? reconcileDraftWithTasks(
+            rawDraft,
+            activeTasks,
+            preferences.dismissedIds,
+          )
+        : null,
+    [activeTasks, preferences.dismissedIds, rawDraft],
+  );
 
   const conflicts = useMemo(() => {
     if (!draft || !evaluatedAt) return [];
@@ -230,12 +220,10 @@ export function useDailySchedule(activeTasks: Task[]) {
     updateSettings,
     durations,
     draft,
-    planningDay,
     conflicts,
     conflictsByTaskId,
     availabilityMessage,
-    generating,
-    refreshing,
+    pending,
     generate,
     refreshAvailability,
     clear,

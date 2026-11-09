@@ -32,6 +32,8 @@ export type ScheduleAvailability = "live" | "not-connected" | "unavailable";
 /** A suggested block of time for one task. Not a calendar event. */
 export interface ScheduleBlock {
   taskId: string;
+  /** 1-based position of the task in Today's Plan (1 = highest priority). */
+  rank: number;
   title: string;
   /** Task notes, carried through to the Google Calendar prefill. */
   notes: string;
@@ -46,11 +48,25 @@ export interface ScheduleBlock {
   adjusted: boolean;
 }
 
-export type UnscheduledReason = "window-passed" | "no-free-time" | "no-room";
+/**
+ * Why a recommended task could not be placed.
+ *
+ * - `window-passed` — the planning window has already ended for today.
+ * - `no-free-time` — busy times cover the whole remaining window.
+ * - `too-long` — no single open stretch is long enough for this task.
+ * - `no-room` — it would fit, but higher-priority tasks took the open time.
+ */
+export type UnscheduledReason =
+  | "window-passed"
+  | "no-free-time"
+  | "too-long"
+  | "no-room";
 
 /** A recommended task the engine could not place. */
 export interface UnscheduledTask {
   taskId: string;
+  /** 1-based position of the task in Today's Plan. */
+  rank: number;
   title: string;
   durationMinutes: number;
   reason: UnscheduledReason;
@@ -65,7 +81,9 @@ export interface ScheduleDraft {
   /** ISO of the earliest instant the engine was allowed to schedule at. */
   earliestStart: string;
   availability: ScheduleAvailability;
+  /** Placed blocks in chronological order. */
   blocks: ScheduleBlock[];
+  /** Tasks that could not be placed, in priority order. */
   unscheduled: UnscheduledTask[];
 }
 
