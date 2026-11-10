@@ -10,6 +10,7 @@ import { CompletedSection } from "@/components/CompletedSection";
 import { DailyOverview } from "@/components/DailyOverview";
 import { DoingNowSection } from "@/components/DoingNowSection";
 import { ImportLocalBanner } from "@/components/ImportLocalBanner";
+import { SmartDailySchedule } from "@/components/SmartDailySchedule";
 import { TaskForm } from "@/components/TaskForm";
 import { TodaysPlan } from "@/components/TodaysPlan";
 import { useAuth } from "@/hooks/useAuth";
@@ -20,6 +21,7 @@ import {
   countImportableLocalTasks,
   importLocalTasks,
 } from "@/lib/importLocal";
+import { calendarCardKey, scheduleSectionKey } from "@/lib/plannerKeys";
 import { reloadLocalState } from "@/lib/reloadLocal";
 import type { SupabaseConfigDiagnostic } from "@/lib/supabase/config";
 import { getActiveTasks, getCompletedTasks } from "@/lib/tasks";
@@ -54,6 +56,12 @@ export function PlannerApp({ devSupabaseDiagnostic = null }: PlannerAppProps) {
     string | null
   >(null);
   const [authCompleting, setAuthCompleting] = useState(false);
+  // Bumped when the Google Calendar connection drops, which remounts the
+  // Smart Daily Schedule so its transient draft is discarded (Mission 12).
+  const [calendarEpoch, setCalendarEpoch] = useState(0);
+  // Bumped when the schedule finds Google Calendar access revoked, which
+  // remounts the Calendar card so it re-checks its connection status.
+  const [calendarCardEpoch, setCalendarCardEpoch] = useState(0);
 
   const ready = hydrated && !authLoading && !authCompleting;
   useCloudSync(user?.id, ready && Boolean(user));
@@ -155,7 +163,22 @@ export function PlannerApp({ devSupabaseDiagnostic = null }: PlannerAppProps) {
 
       <TodaysPlan activeTasks={activeTasks} />
 
-      {user && <CalendarAvailability key={user.id} />}
+      {user && (
+        <SmartDailySchedule
+          key={scheduleSectionKey(user.id, calendarEpoch)}
+          activeTasks={activeTasks}
+          onCalendarAccessLost={() =>
+            setCalendarCardEpoch((epoch) => epoch + 1)
+          }
+        />
+      )}
+
+      {user && (
+        <CalendarAvailability
+          key={calendarCardKey(user.id, calendarCardEpoch)}
+          onDisconnected={() => setCalendarEpoch((epoch) => epoch + 1)}
+        />
+      )}
 
       <ActiveTasksSection
         tasks={activeTasks}

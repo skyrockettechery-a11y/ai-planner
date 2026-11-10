@@ -18,12 +18,13 @@ Missions are small, complete milestones. Each mission ships working software on 
 | 08 | Add Task First | Quick capture at top of app, under auth bar |
 | 09 | Documentation Archive | `docs/` archive, README links |
 | 10 | Documentation Knowledge Base | DECISIONS, UX_PRINCIPLES, AI onboarding guide |
+| 11 | Google Calendar Phase 1 | Separate Google OAuth (`calendar.freebusy`), encrypted server-side token, busy-period view (PR #1, merged) |
 
 ## In Review
 
 | Mission | Name | Summary |
 |---------|------|---------|
-| 11 | Google Calendar Phase 1 | Separate Google OAuth (`calendar.freebusy`), encrypted server-side token, busy-period view |
+| 12 | Smart Daily Scheduling (Calendar P2A) | Today's Plan top 3 → suggested time blocks around primary-calendar busy times; manual adjustments with live conflict warnings; manual "Add to Google Calendar" links. No write-back, no new scope, nothing persisted. See [MISSION_12.md](../MISSION_12.md) |
 
 ---
 
@@ -39,7 +40,8 @@ Priority order is indicative — the human sets direction before each mission.
 | **Google OAuth** | Finish Google provider setup; enable one-tap Google sign-in |
 | **Realtime sync** | Supabase realtime subscriptions instead of refresh-only |
 | **Real AI planning assistant** | LLM-backed classification, recommendations, and planning |
-| **Calendar Phase 2** | Use busy periods in Today's Plan (e.g. available focus time); later: time blocking, event write-back |
+| **Calendar Phase 2B** | Opt-in automated event write-back for scheduled blocks (needs a broader OAuth scope and explicit owner approval; not started) |
+| **Calendar follow-ups** | Multiple calendars in availability, multi-day scheduling, saved working-hours preferences |
 | **Weekly review** | Reflect on completion patterns and plan the week ahead |
 
 ---
@@ -53,13 +55,14 @@ Priority order is indicative — the human sets direction before each mission.
   │
   └──► 07 Cloud Sync ──► 08 Quick Capture ──► 09–10 Docs
                                                   │
-                                                  └──► 11 Calendar Phase 1 ──► Future: OAuth, Realtime, AI, Calendar Phase 2…
+                                                  └──► 11 Calendar Phase 1 ──► 12 Smart Scheduling (P2A) ──► Future: P2B write-back, OAuth, Realtime, AI…
 ```
 
 - **Cloud sync (07)** depends on deployment (06) for cross-device testing
 - **Google OAuth** builds on auth infrastructure from Mission 07
 - **Realtime sync** extends the sync layer in `useCloudSync`
 - **Real AI** replaces or augments `lib/classify.ts` and `lib/dailyPlan.ts`
+- **Smart Scheduling (12)** builds on Today's Plan ranking (`lib/dailyPlan.ts`) and Mission 11's free/busy route; **P2B** write-back would build on 12
 
 ---
 

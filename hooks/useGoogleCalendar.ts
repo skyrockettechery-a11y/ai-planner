@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   computeCalendarWindow,
   groupBusyByDay,
@@ -83,7 +83,16 @@ export interface BusyState {
   days: DayBusy[];
 }
 
-export function useGoogleCalendar() {
+export interface UseGoogleCalendarOptions {
+  /**
+   * Called when the stored connection goes away — an explicit disconnect, or
+   * a revoked/expired grant detected while loading busy times. Lets dependent
+   * features (Mission 12 schedule drafts) drop calendar-derived state.
+   */
+  onDisconnected?: () => void;
+}
+
+export function useGoogleCalendar(options: UseGoogleCalendarOptions = {}) {
   const [feedback, setFeedback] = useState<CalendarFeedback | null>(() =>
     readFeedbackFromUrl(),
   );
@@ -96,11 +105,20 @@ export function useGoogleCalendar() {
   const [busyError, setBusyError] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
 
+  // Held in a ref so an inline callback from the caller cannot change
+  // markDisconnected -> loadBusy -> the mount effect, which would refetch
+  // status on every render.
+  const onDisconnectedRef = useRef(options.onDisconnected);
+  useEffect(() => {
+    onDisconnectedRef.current = options.onDisconnected;
+  }, [options.onDisconnected]);
+
   const markDisconnected = useCallback(() => {
     setBusy(null);
     setStatus((current) =>
       current ? { ...current, connected: false, connectedAt: null } : current,
     );
+    onDisconnectedRef.current?.();
   }, []);
 
   const loadBusy = useCallback(

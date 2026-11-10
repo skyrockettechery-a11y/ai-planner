@@ -99,7 +99,14 @@ function DayRow({ entry }: { entry: DayBusy }) {
   );
 }
 
-export function CalendarAvailability() {
+interface CalendarAvailabilityProps {
+  /** Notified when the connection is dropped, so schedule drafts can clear. */
+  onDisconnected?: () => void;
+}
+
+export function CalendarAvailability({
+  onDisconnected,
+}: CalendarAvailabilityProps = {}) {
   const {
     feedback,
     dismissFeedback,
@@ -113,7 +120,7 @@ export function CalendarAvailability() {
     connect,
     disconnect,
     loadBusy,
-  } = useGoogleCalendar();
+  } = useGoogleCalendar({ onDisconnected });
 
   const connected = status?.connected === true;
 
