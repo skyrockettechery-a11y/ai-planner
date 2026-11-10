@@ -99,11 +99,11 @@ Documented problems, causes, and workarounds encountered during development and 
 
 ### Dev-only `npm audit` findings
 
-**Symptom:** `npm audit` (including dev dependencies) reports high-severity advisories in `brace-expansion`, `braces`/`micromatch`/`fast-glob`, `js-yaml`, `browserslist`, `@babel/core`.
+**Symptom:** `npm audit` (including dev dependencies) reports high-severity advisories in `brace-expansion`, `js-yaml`, `browserslist`, `zod`, and moderate/low ones in `minimatch`/`typescript-eslint`, `@babel/core`.
 
-**Cause:** Transitive dependencies of ESLint, `eslint-config-next` and the TypeScript/Tailwind build tooling. They run only on developer machines and in CI against this repo's own code; none ship in the deployed app. `npm audit --omit=dev` reports **0** vulnerabilities (since Next.js 16.3.8, Mission 11).
+**Cause:** Transitive dependencies of ESLint, `eslint-config-next` and the TypeScript/Tailwind build tooling. They run only on developer machines and in CI against this repo's own code; none ship in the deployed app. `npm audit --omit=dev` reports **0** vulnerabilities (since Next.js 16.4.6; 16.3.8 is affected by GHSA-2464-fhr4-w9xw, GHSA-673q-mjm6-r5xr and GHSA-p3m5-59mp-jv5r).
 
-**Fix:** Not urgent. The `braces` chain's only suggested fix downgrades `eslint-config-next` to 14.x (breaking), so it waits for upstream. The others can be lifted with a non-forced `npm audit fix` in a separate dependency-maintenance change. Never use `npm audit fix --force`.
+**Fix:** Not urgent. The `minimatch`/`typescript-eslint` chain's only suggested fix downgrades `eslint-config-next` to 15.x (breaking), so it waits for upstream. The others can be lifted with a non-forced `npm audit fix` in a separate dependency-maintenance change. Never use `npm audit fix --force`.
 
 ### `middleware` file convention deprecated (Next.js 16)
 
